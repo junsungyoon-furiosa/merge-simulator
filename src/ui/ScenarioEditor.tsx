@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react";
 import type { PolicyConfig, ScenarioConfig } from "../sim/model";
+import "./reset-defaults.css";
 
 interface Props {
   scenario: ScenarioConfig;
@@ -7,6 +8,7 @@ interface Props {
   disabled: boolean;
   onScenario: (scenario: ScenarioConfig) => void;
   onPolicies: (policies: PolicyConfig[]) => void;
+  onReset: () => void;
 }
 
 interface FieldProps {
@@ -62,7 +64,7 @@ function Field({ title, description, unit, wide = false, children }: FieldProps)
   );
 }
 
-export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPolicies }: Props) {
+export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPolicies, onReset }: Props) {
   const setNumber = (key: "prCount" | "targetMergeCount" | "repetitions", value: number) => onScenario({ ...scenario, [key]: value });
   const setPolicyNumber = (index: number, key: "batchSize" | "maxWait", value: number) => {
     const next = [...policies];
@@ -79,6 +81,7 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
       </div>
 
       <fieldset disabled={disabled}>
+        <button type="button" className="reset-defaults-button" onClick={onReset}>기본값으로 초기화</button>
         <Field title="실험 이름" description={descriptions.name} wide>
           {(id) => <input id={id} value={scenario.name} onChange={(event) => onScenario({ ...scenario, name: event.target.value })} />}
         </Field>

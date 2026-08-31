@@ -16,6 +16,7 @@ export function App() {
   const [progress, setProgress] = useState({ done: 0, total: 1 });
   const [message, setMessage] = useState("적절한 조건을 조정하고, 왼쪽 버튼으로 정책을 시뮬레이션 하세요");
   const [replayEvents, setReplayEvents] = useState<SimEvent[]>();
+  const [replayTotalPrs, setReplayTotalPrs] = useState<number>();
   const [replayLoading, setReplayLoading] = useState(false);
   const [lastReplay, setLastReplay] = useState<RunResult>();
   const client = useRef<SimulationClient | undefined>(undefined);
@@ -29,6 +30,11 @@ export function App() {
 
   useEffect(() => { const timer = window.setTimeout(() => saveScenario(scenario, policies).catch(() => undefined), 300); return () => window.clearTimeout(timer); }, [scenario, policies]);
 
+  const resetDefaults = () => {
+    setScenario(structuredClone(DEFAULT_SCENARIO));
+    setPolicies(structuredClone(DEFAULT_POLICIES));
+  };
+
   const run = async () => {
     const parsed = scenarioSchema.safeParse(scenario);
     if (!parsed.success) { setMessage(parsed.error.issues[0]?.message ?? "입력값을 확인하세요."); return; }
@@ -41,9 +47,12 @@ export function App() {
   };
 
   const replay = async (policyIndex: number) => {
-    setReplayEvents([]); setReplayLoading(true);
+    const experiment = result;
+    const policy = experiment?.results[policyIndex]?.policy;
+    if (!experiment || !policy) return;
+    setReplayEvents([]); setReplayTotalPrs(experiment.scenario.prCount); setReplayLoading(true);
     try {
-      const replayResult = await client.current!.replay(scenario, policies[policyIndex], 0, { onEvents: (events) => setReplayEvents((current) => [...(current ?? []), ...events]) });
+      const replayResult = await client.current!.replay(experiment.scenario, policy, 0, { onEvents: (events) => setReplayEvents((current) => [...(current ?? []), ...events]) });
       setLastReplay(replayResult);
     } finally { setReplayLoading(false); }
   };
@@ -67,7 +76,7 @@ export function App() {
       </header>
 
       <main>
-        <ScenarioEditor scenario={scenario} policies={policies} disabled={running} onScenario={setScenario} onPolicies={setPolicies} />
+        <ScenarioEditor scenario={scenario} policies={policies} disabled={running} onScenario={setScenario} onPolicies={setPolicies} onReset={resetDefaults} />
         <div className="workspace">
           <section className="hero">
             <h1><em>Merge Simulator</em><br/>머지 시뮬레이터</h1>
@@ -83,7 +92,7 @@ export function App() {
         </div>
       </main>
       <footer><span>브라우저 안에서만 계산되고 저장됩니다.</span><span>schema v1 · deterministic seed</span></footer>
-      {replayEvents && <RunReplay events={replayEvents} totalPrs={scenario.prCount} loading={replayLoading} onClose={() => setReplayEvents(undefined)} />}
+      {replayEvents && replayTotalPrs !== undefined && <RunReplay events={replayEvents} totalPrs={replayTotalPrs} loading={replayLoading} onClose={() => { setReplayEvents(undefined); setReplayTotalPrs(undefined); }} />}
     </div>
   );
 }

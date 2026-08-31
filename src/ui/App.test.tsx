@@ -1,18 +1,36 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { DEFAULT_POLICIES, DEFAULT_SCENARIO, type ExperimentResult } from "../sim/model";
 import { App } from "./App";
+
+const simulation = vi.hoisted(() => ({
+  runExperiment: vi.fn(), replay: vi.fn(), cancel: vi.fn(), terminate: vi.fn(),
+}));
+const storage = vi.hoisted(() => ({
+  loadScenario: vi.fn(), saveScenario: vi.fn(), saveExperiment: vi.fn(),
+}));
+
+vi.mock("../worker/client", () => ({
+  SimulationClient: class {
+    runExperiment = simulation.runExperiment;
+    replay = simulation.replay;
+    cancel = simulation.cancel;
+    terminate = simulation.terminate;
+  },
+}));
+vi.mock("../storage/database", () => storage);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  storage.loadScenario.mockResolvedValue(undefined);
+  storage.saveScenario.mockResolvedValue(undefined);
+  storage.saveExperiment.mockResolvedValue(undefined);
+});
 afterEach(cleanup);
-
-class WorkerMock {
-  addEventListener = vi.fn(); removeEventListener = vi.fn(); postMessage = vi.fn(); terminate = vi.fn();
-}
-
-vi.stubGlobal("Worker", WorkerMock);
-vi.mock("../storage/database", () => ({ loadScenario: vi.fn().mockResolvedValue(undefined), saveScenario: vi.fn().mockResolvedValue(undefined), saveExperiment: vi.fn().mockResolvedValue(undefined) }));
 
 test("renders the simulator's primary action and three policies", () => {
   render(<App />);
-  expect(screen.getByRole("button", { name: /3개 정책 비교 실행/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /시뮬레이션 시작/ })).toBeInTheDocument();
   expect(screen.getAllByText(/순차 CI/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/배치 분할/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/LLM 보조/).length).toBeGreaterThan(0);
@@ -22,4 +40,68 @@ test("provides help tooltips for every scenario field", () => {
   render(<App />);
   expect(screen.getAllByRole("button", { name: "도움말" })).toHaveLength(19);
   expect(screen.getByText(/비정상인 후보 master를 CI가 성공으로 잘못 판정/)).toHaveAttribute("role", "tooltip");
+});
+
+test("resets all scenario and policy inputs to recommended defaults", async () => {
+  simulation.runExperiment.mockReturnValueOnce(new Promise(() => undefined));
+  render(<App />);
+
+  fireEvent.change(screen.getByLabelText("실험 이름"), { target: { value: "임의 설정" } });
+  fireEvent.change(screen.getByLabelText("전체 PR"), { target: { value: "700" } });
+  fireEvent.change(screen.getByLabelText("CI 최소 시간"), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText("LLM 적중률"), { target: { value: "25" } });
+  fireEvent.change(screen.getByLabelText("CI 1회 비용"), { target: { value: "9" } });
+  fireEvent.change(screen.getByLabelText("배치 분할 크기"), { target: { value: "16" } });
+  fireEvent.change(screen.getByLabelText("LLM 보조 크기"), { target: { value: "20" } });
+
+  fireEvent.click(screen.getByRole("button", { name: "기본값으로 초기화" }));
+
+  expect(screen.getByLabelText("실험 이름")).toHaveValue(DEFAULT_SCENARIO.name);
+  expect(screen.getByLabelText("전체 PR")).toHaveValue(DEFAULT_SCENARIO.prCount);
+  expect(screen.getByLabelText("CI 최소 시간")).toHaveValue(50);
+  expect(screen.getByLabelText("LLM 적중률")).toHaveValue(70);
+  expect(screen.getByLabelText("CI 1회 비용")).toHaveValue(null);
+  expect(screen.getByLabelText("배치 분할 크기")).toHaveValue(8);
+  expect(screen.getByLabelText("LLM 보조 크기")).toHaveValue(8);
+
+  fireEvent.click(screen.getByRole("button", { name: /시뮬레이션 시작/ }));
+  await waitFor(() => expect(simulation.runExperiment).toHaveBeenCalled());
+  expect(simulation.runExperiment.mock.calls[0][0]).toEqual(DEFAULT_SCENARIO);
+  expect(simulation.runExperiment.mock.calls[0][1]).toEqual(DEFAULT_POLICIES);
+});
+
+test("replays the selected experiment snapshot instead of current editor values", async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    scale: vi.fn(), clearRect: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), fillStyle: "",
+  } as unknown as CanvasRenderingContext2D);
+  const resultScenario = { ...DEFAULT_SCENARIO, name: "완료된 실험", seed: "result-seed", prCount: 123, targetMergeCount: 100 };
+  const resultPolicies = [
+    DEFAULT_POLICIES[0],
+    { kind: "batchSplit" as const, batchSize: 4, maxWait: 12, splitRatio: 0.25 },
+    DEFAULT_POLICIES[2],
+  ];
+  const experiment: ExperimentResult = {
+    id: "experiment-1",
+    createdAt: "2026-08-31T00:00:00.000Z",
+    scenario: resultScenario,
+    policies: resultPolicies,
+    results: resultPolicies.map((policy) => ({ policy, runs: [], summary: {} })),
+    elapsedMs: 10,
+  };
+  simulation.runExperiment.mockResolvedValueOnce(experiment);
+  simulation.replay.mockReturnValueOnce(new Promise(() => undefined));
+
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: /시뮬레이션 시작/ }));
+  await screen.findByRole("heading", { name: "정책 비교 결과" });
+
+  fireEvent.change(screen.getByLabelText("전체 PR"), { target: { value: "777" } });
+  fireEvent.change(screen.getByLabelText("배치 분할 크기"), { target: { value: "16" } });
+  fireEvent.click(screen.getAllByRole("button", { name: /실행 재생/ })[1]);
+
+  await waitFor(() => expect(simulation.replay).toHaveBeenCalled());
+  expect(simulation.replay.mock.calls[0][0]).toBe(resultScenario);
+  expect(simulation.replay.mock.calls[0][1]).toBe(resultPolicies[1]);
+  expect(simulation.replay.mock.calls[0][2]).toBe(0);
+  expect(screen.getByLabelText("123개 PR 상태 시각화")).toBeInTheDocument();
 });
