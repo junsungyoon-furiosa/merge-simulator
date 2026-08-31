@@ -2,7 +2,7 @@
 
 ## Project purpose
 
-MergeLab은 PR 병합 정책을 비교하는 브라우저 전용 이산사건
+Merge Simulator은 PR 병합 정책을 비교하는 브라우저 전용 이산사건
 시뮬레이터다. 정책의 우열을 자동으로 판정하지 않는다.
 
 요구사항의 기준 문서:

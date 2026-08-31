@@ -1,12 +1,12 @@
 import { openDB, type DBSchema } from "idb";
 import type { ExperimentResult, PolicyConfig, ScenarioConfig } from "../sim/model";
 
-interface MergeLabDb extends DBSchema {
+interface MergeSimulatorDb extends DBSchema {
   scenarios: { key: string; value: { id: string; updatedAt: string; scenario: ScenarioConfig; policies: PolicyConfig[] } };
   experiments: { key: string; value: ExperimentResult };
 }
 
-const db = () => openDB<MergeLabDb>("merge-lab", 1, {
+const db = () => openDB<MergeSimulatorDb>("merge-lab", 1, {
   upgrade(database) {
     database.createObjectStore("scenarios", { keyPath: "id" });
     database.createObjectStore("experiments", { keyPath: "id" });

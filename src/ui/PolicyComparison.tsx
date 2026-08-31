@@ -1,10 +1,10 @@
 import type { ExperimentResult, MetricSummary } from "../sim/model";
 import { policyLabel } from "../sim/model";
+import { formatDuration } from "./formatDuration";
 
 const pct = (value: number | null | undefined) => value == null ? "—" : `${(value * 100).toFixed(2)}%`;
 const num = (value: number | null | undefined, digits = 1) => value == null ? "—" : value.toFixed(digits);
 const mean = (summary: Record<string, MetricSummary>, key: string) => summary[key]?.mean ?? null;
-
 export function PolicyComparison({ result, onReplay }: { result: ExperimentResult; onReplay: (policyIndex: number) => void }) {
   const points = result.results.map((item) => ({ x: mean(item.summary, "normalMergeTime.mean") ?? 0, y: mean(item.summary, "defectIngressRate") ?? 0 }));
   const maxX = Math.max(1, ...points.map((point) => point.x));
@@ -22,9 +22,9 @@ export function PolicyComparison({ result, onReplay }: { result: ExperimentResul
           <article className={`metric-card accent-${index}`} key={item.policy.kind}>
             <div className="card-top"><span>0{index + 1}</span><button onClick={() => onReplay(index)}>실행 재생 ↗</button></div>
             <h3>{policyLabel(item.policy)}</h3>
-            <div className="hero-metric"><strong>{pct(mean(item.summary, "defectIngressRate"))}</strong><span>결함 PR 유입률</span></div>
+            <div className="hero-metric"><strong>{formatDuration(mean(item.summary, "normalMergeTime.mean"))}</strong><span>정상 PR 평균 머지</span></div>
             <dl>
-              <div><dt>정상 PR 평균 머지</dt><dd>{num(mean(item.summary, "normalMergeTime.mean"))}분</dd></div>
+              <div><dt>결함 PR 유입률</dt><dd>{pct(mean(item.summary, "defectIngressRate"))}</dd></div>
               <div><dt>처리량</dt><dd>{num(mean(item.summary, "throughput"), 3)} /분</dd></div>
               <div><dt>CI 실행</dt><dd>{num(mean(item.summary, "ciRuns"), 0)}회</dd></div>
               <div><dt>CI 사용률</dt><dd>{pct(mean(item.summary, "ciUtilization"))}</dd></div>

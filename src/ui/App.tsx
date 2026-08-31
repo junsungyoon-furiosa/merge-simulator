@@ -14,7 +14,7 @@ export function App() {
   const [result, setResult] = useState<ExperimentResult>();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 1 });
-  const [message, setMessage] = useState("조건을 조정하고 세 정책을 같은 세계에서 비교하세요.");
+  const [message, setMessage] = useState("적절한 조건을 조정하고, 왼쪽 버튼으로 정책을 시뮬레이션 하세요");
   const [replayEvents, setReplayEvents] = useState<SimEvent[]>();
   const [replayLoading, setReplayLoading] = useState(false);
   const [lastReplay, setLastReplay] = useState<RunResult>();
@@ -56,7 +56,7 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand"><div className="brand-mark"><span /><span /><span /></div><div><b>MergeLab</b><small>PR STRATEGY SIMULATOR</small></div></div>
+        <div className="brand"><div className="brand-mark"><span /><span /><span /></div><div><b>MERGE SIMULATOR</b></div></div>
         <div className="top-actions">
           <button onClick={() => importRef.current?.click()}>불러오기</button>
           <input ref={importRef} hidden type="file" accept="application/json" onChange={(event) => event.target.files?.[0] && importFile(event.target.files[0])} />
@@ -70,25 +70,15 @@ export function App() {
         <ScenarioEditor scenario={scenario} policies={policies} disabled={running} onScenario={setScenario} onPolicies={setPolicies} />
         <div className="workspace">
           <section className="hero">
-            <span className="eyebrow">DISCRETE-EVENT MONTE CARLO LAB</span>
-            <h1>더 빠른 머지와<br /><em>더 안전한 master</em> 사이.</h1>
-            <p>결론을 정하지 않습니다. 같은 PR 흐름을 세 가지 정책에 통과시켜 안전성, 속도, 처리량과 비용을 숫자로 보여줍니다.</p>
+            <h1><em>Merge Simulator</em><br/>머지 시뮬레이터</h1>
+            <p>정책들이 PR을 검증하고 머지하는 과정을 시뮬레이션 합니다.</p>
             <div className="run-strip">
-              <button className="run-button" disabled={running} onClick={run}>{running ? "실험 실행 중" : "3개 정책 비교 실행"}<span>→</span></button>
+              <button className="run-button" disabled={running} onClick={run}>{running ? "시뮬레이션 실행 중" : "시뮬레이션 시작"}<span>→</span></button>
               {running && <button className="cancel-button" onClick={() => client.current?.cancel()}>중단</button>}
               <div className="progress-block"><div><span style={{ width: `${(progress.done / progress.total) * 100}%` }} /></div><small>{message}</small></div>
             </div>
           </section>
-
-          {!result && !running && <section className="empty-state">
-            <div className="flow-line"><span>PR 도착</span><i>→</i><span>정책 선택</span><i>→</i><span>CI / LLM</span><i>→</i><span>머지 또는 격리</span></div>
-            <div className="preview-grid">
-              <article><b>01</b><h3>하나씩 확실하게</h3><p>순차 CI는 기준선입니다. 느리지만 실패 원인을 좁히기 쉽습니다.</p></article>
-              <article><b>02</b><h3>묶고, 실패하면 나누기</h3><p>배치 분할은 처리량과 추가 CI 실행 사이의 균형을 탐색합니다.</p></article>
-              <article><b>03</b><h3>탐정의 도움 받기</h3><p>LLM 후보를 이용하되 최종 격리는 반드시 단독 CI가 결정합니다.</p></article>
-            </div>
-          </section>}
-          {running && <section className="running-state"><div className="orbit"><i /><i /><i /></div><strong>{progress.done} / {progress.total}</strong><p>반복 실행을 계산하는 동안 화면은 계속 반응합니다.</p></section>}
+          {running && <section className="running-state"><div className="orbit"><i /><i /><i /></div><strong>{progress.done} / {progress.total}</strong></section>}
           {result && <PolicyComparison result={result} onReplay={replay} />}
         </div>
       </main>

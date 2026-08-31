@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PrStatus, SimEvent } from "../sim/model";
+import { formatElapsedTime } from "./formatDuration";
 
 const COLORS: Record<PrStatus, string> = {
-  scheduled: "#26312f", waiting: "#8b9691", ciWaiting: "#d9a441", ciRunning: "#45b9ff",
-  investigating: "#ffb44a", suspected: "#ff735c", merged: "#4ed49d", quarantined: "#8b5cf6",
+  scheduled: "#d0d5dd", waiting: "#98a2b3", ciWaiting: "#f79009", ciRunning: "#3182f6",
+  investigating: "#f59e0b", suspected: "#f04438", merged: "#12b76a", quarantined: "#8b5cf6",
+};
+
+const STATUS_LABELS: Record<PrStatus, string> = {
+  scheduled: "도착 예정", waiting: "대기", ciWaiting: "CI 대기", ciRunning: "CI 실행",
+  investigating: "조사", suspected: "의심", merged: "머지", quarantined: "격리",
 };
 
 function ReplayCanvas({ count, states }: { count: number; states: Map<string, PrStatus> }) {
@@ -61,9 +67,9 @@ export function RunReplay({ events, totalPrs, loading, onClose }: { events: SimE
     <div className="replay-overlay" role="dialog" aria-modal="true" aria-label="실행 재생">
       <div className="replay-shell">
         <header><div><span className="eyebrow">DETERMINISTIC REPLAY</span><h2>PR 상태 타임라인</h2></div><button className="close-button" onClick={onClose}>닫기 ×</button></header>
-        <div className="replay-meta"><strong>T+ {currentTime.toFixed(0)}분</strong><span>{cursor.toLocaleString()} / {events.length.toLocaleString()} events {loading && "· 수신 중"}</span></div>
+        <div className="replay-meta"><strong>T+ {formatElapsedTime(currentTime)}</strong><span>{cursor.toLocaleString()} / {events.length.toLocaleString()} events {loading && "· 수신 중"}</span></div>
         <ReplayCanvas count={totalPrs} states={states} />
-        <div className="legend">{counts.filter(([, count]) => count > 0).map(([status, count]) => <span key={status}><i style={{ background: COLORS[status as PrStatus] }} />{status} {count}</span>)}</div>
+        <div className="legend">{counts.filter(([, count]) => count > 0).map(([status, count]) => <span key={status}><i style={{ background: COLORS[status as PrStatus] }} />{STATUS_LABELS[status as PrStatus]} {count}</span>)}</div>
         <input className="timeline" aria-label="재생 위치" type="range" min={0} max={Math.max(1, events.length)} value={cursor} onChange={(event) => { setPlaying(false); setCursor(Number(event.target.value)); }} />
         <div className="playback-controls">
           <button onClick={() => setCursor(0)}>처음</button>
