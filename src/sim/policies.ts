@@ -122,8 +122,6 @@ class LlmAssistedPolicy extends BasePolicy {
   }
 }
 
-export function createPolicy(config: PolicyConfig): MergePolicy {
-  if (config.kind === "sequential") return new SequentialPolicy(config);
-  if (config.kind === "batchSplit") return new BatchSplitPolicy(config);
-  return new LlmAssistedPolicy(config);
-}
+export const createSequentialPolicy = (config: Extract<PolicyConfig, { kind: "sequential" }>): MergePolicy => new SequentialPolicy(config);
+export const createBatchSplitPolicy = (config: Extract<PolicyConfig, { kind: "batchSplit" }>): MergePolicy => new BatchSplitPolicy(config);
+export const createLlmAssistedPolicy = (config: Extract<PolicyConfig, { kind: "llmAssisted" }>): MergePolicy => new LlmAssistedPolicy(config);

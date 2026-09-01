@@ -1,13 +1,15 @@
-import { useId, type ReactNode } from "react";
-import type { PolicyConfig, ScenarioConfig } from "../sim/model";
+import { useId, useState, type ReactNode } from "react";
+import type { PolicyConfig, PolicyInstance, PolicyKind, ScenarioConfig } from "../sim/model";
+import { createPolicyInstance, getPolicyDefinition, POLICY_DEFINITIONS } from "../sim/policyRegistry";
+import "./policy-expansion.css";
 import "./reset-defaults.css";
 
 interface Props {
   scenario: ScenarioConfig;
-  policies: PolicyConfig[];
+  policies: PolicyInstance[];
   disabled: boolean;
   onScenario: (scenario: ScenarioConfig) => void;
-  onPolicies: (policies: PolicyConfig[]) => void;
+  onPolicies: (policies: PolicyInstance[]) => void;
   onReset: () => void;
 }
 
@@ -65,11 +67,15 @@ function Field({ title, description, unit, wide = false, children }: FieldProps)
 }
 
 export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPolicies, onReset }: Props) {
+  const [newPolicyKind, setNewPolicyKind] = useState<PolicyKind>("sequential");
   const setNumber = (key: "prCount" | "targetMergeCount" | "repetitions", value: number) => onScenario({ ...scenario, [key]: value });
-  const setPolicyNumber = (index: number, key: "batchSize" | "maxWait", value: number) => {
-    const next = [...policies];
-    next[index] = { ...next[index], [key]: value } as PolicyConfig;
-    onPolicies(next);
+  const setPolicyNumber = (policyId: string, key: string, value: number) => {
+    onPolicies(policies.map((policy) => policy.id === policyId
+      ? { ...policy, config: { ...policy.config, [key]: value } as PolicyConfig }
+      : policy));
+  };
+  const duplicatePolicy = (policy: PolicyInstance) => {
+    onPolicies([...policies, { id: crypto.randomUUID(), config: structuredClone(policy.config) }]);
   };
 
   return (
@@ -160,9 +166,46 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
 
         <div className="section-rule"><span>비교 정책</span></div>
         <div className="policy-list">
-          <div className="policy-row"><b>01</b><span>순차 CI</span><small>PR을 한 개씩 검사</small></div>
-          <div className="policy-row editable"><b>02</b><span>배치 분할</span><label>크기<input aria-label="배치 분할 크기" type="number" min={2} max={100} value={policies[1]?.kind === "batchSplit" ? policies[1].batchSize : 8} onChange={(event) => setPolicyNumber(1, "batchSize", Number(event.target.value))} /></label></div>
-          <div className="policy-row editable"><b>03</b><span>LLM 보조</span><label>크기<input aria-label="LLM 보조 크기" type="number" min={2} max={100} value={policies[2]?.kind === "llmAssisted" ? policies[2].batchSize : 8} onChange={(event) => setPolicyNumber(2, "batchSize", Number(event.target.value))} /></label></div>
+          {policies.map((policy, index) => {
+            const definition = getPolicyDefinition(policy.config.kind);
+            const values = policy.config as unknown as Record<string, number>;
+            return (
+              <article className="policy-instance" key={policy.id} data-policy-id={policy.id}>
+                <div className="policy-instance-heading">
+                  <b>{String(index + 1).padStart(2, "0")}</b>
+                  <div><strong>{definition.label}</strong><small>{definition.description}</small></div>
+                </div>
+                {definition.fields.length > 0 && (
+                  <div className="policy-field-grid">
+                    {definition.fields.map((field) => (
+                      <label key={field.key}>
+                        <span>{field.label}</span>
+                        <input
+                          aria-label={`${index + 1}번 ${definition.label} ${field.label}`}
+                          type="number"
+                          min={field.min}
+                          max={field.max}
+                          step={field.step}
+                          value={values[field.key]}
+                          onChange={(event) => setPolicyNumber(policy.id, field.key, Number(event.target.value))}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="policy-instance-actions">
+                  <button type="button" aria-label={`${index + 1}번 ${definition.label} 복제`} onClick={() => duplicatePolicy(policy)}>복제</button>
+                  <button type="button" aria-label={`${index + 1}번 ${definition.label} 제거`} disabled={policies.length === 1} onClick={() => onPolicies(policies.filter((item) => item.id !== policy.id))}>제거</button>
+                </div>
+              </article>
+            );
+          })}
+          <div className="policy-add-row">
+            <select aria-label="추가할 정책" value={newPolicyKind} onChange={(event) => setNewPolicyKind(event.target.value as PolicyKind)}>
+              {POLICY_DEFINITIONS.map((definition) => <option key={definition.kind} value={definition.kind}>{definition.label}</option>)}
+            </select>
+            <button type="button" onClick={() => onPolicies([...policies, createPolicyInstance(newPolicyKind)])}>정책 추가</button>
+          </div>
         </div>
       </fieldset>
     </aside>

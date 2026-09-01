@@ -1,7 +1,7 @@
 import { EventQueue } from "./eventQueue";
 import { calculateMetrics } from "./metrics";
-import type { BatchId, EndReason, FailedBatchRecord, PolicyConfig, PrId, PrStatus, RunResult, ScenarioConfig, SimEvent } from "./model";
-import { createPolicy } from "./policies";
+import type { BatchId, EndReason, FailedBatchRecord, PolicyInstance, PrId, PrStatus, RunResult, ScenarioConfig, SimEvent } from "./model";
+import { createPolicy } from "./policyRegistry";
 import { deriveSeed, Random } from "./random";
 import { generateWorld } from "./world";
 
@@ -13,13 +13,13 @@ type InternalEvent =
 
 const PRIORITY = { complete: 0, arrival: 1, wake: 2 } as const;
 
-export function runSimulation(config: ScenarioConfig, policyConfig: PolicyConfig, repetition = 0): RunResult {
+export function runSimulation(config: ScenarioConfig, policyInstance: PolicyInstance, repetition = 0): RunResult {
   const world = generateWorld(config, repetition);
   const ciDurationRng = new Random(deriveSeed(config.seed, repetition, "ciDuration"));
   const ciOutcomeRng = new Random(deriveSeed(config.seed, repetition, "ciOutcome"));
   const llmDurationRng = new Random(deriveSeed(config.seed, repetition, "llmDuration"));
   const llmOutcomeRng = new Random(deriveSeed(config.seed, repetition, "llmOutcome"));
-  const policy = createPolicy(policyConfig);
+  const policy = createPolicy(policyInstance.config);
   const queue = new EventQueue<InternalEvent>();
   const events: SimEvent[] = [];
   const merged = new Set<PrId>();
@@ -193,7 +193,7 @@ export function runSimulation(config: ScenarioConfig, policyConfig: PolicyConfig
   }
   emit("runEnded", { data: { reason: endReason } });
   return {
-    policy: policyConfig, repetition, seed: deriveSeed(config.seed, repetition), events,
+    policy: policyInstance, repetition, seed: deriveSeed(config.seed, repetition), events,
     metrics: calculateMetrics(world, events, endReason, { ciCost: config.ci.costPerRun, llmCost: config.llm.costPerCall }),
   };
 }

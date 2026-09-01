@@ -13,6 +13,13 @@ export type PolicyConfig =
   | { kind: "batchSplit"; batchSize: number; maxWait: number; splitRatio: number }
   | { kind: "llmAssisted"; batchSize: number; maxWait: number };
 
+export type PolicyKind = PolicyConfig["kind"];
+
+export interface PolicyInstance {
+  id: string;
+  config: PolicyConfig;
+}
+
 export interface ScenarioConfig {
   schemaVersion: 1;
   name: string;
@@ -55,11 +62,6 @@ export const DEFAULT_SCENARIO: ScenarioConfig = {
   llm: { duration: { kind: "uniform", min: 1, max: 3 }, culpritHitRate: 0.7, innocentFalseAccusationRate: 0.1 },
 };
 
-export const DEFAULT_POLICIES: PolicyConfig[] = [
-  { kind: "sequential" },
-  { kind: "batchSplit", batchSize: 8, maxWait: 30, splitRatio: 0.5 },
-  { kind: "llmAssisted", batchSize: 8, maxWait: 30 },
-];
 
 export type PrStatus = "scheduled" | "waiting" | "ciWaiting" | "ciRunning" | "investigating" | "suspected" | "merged" | "quarantined";
 
@@ -167,7 +169,7 @@ export interface DistributionStats {
 }
 
 export interface RunResult {
-  policy: PolicyConfig;
+  policy: PolicyInstance;
   repetition: number;
   seed: string;
   events: SimEvent[];
@@ -185,7 +187,7 @@ export interface MetricSummary {
 }
 
 export interface PolicyExperimentResult {
-  policy: PolicyConfig;
+  policy: PolicyInstance;
   runs: Array<Omit<RunResult, "events">>;
   summary: Record<string, MetricSummary>;
 }
@@ -194,13 +196,7 @@ export interface ExperimentResult {
   id: string;
   createdAt: string;
   scenario: ScenarioConfig;
-  policies: PolicyConfig[];
+  policies: PolicyInstance[];
   results: PolicyExperimentResult[];
   elapsedMs: number;
-}
-
-export function policyLabel(policy: PolicyConfig): string {
-  if (policy.kind === "sequential") return "순차 CI";
-  if (policy.kind === "batchSplit") return `배치 분할 (${policy.batchSize})`;
-  return `LLM 보조 (${policy.batchSize})`;
 }

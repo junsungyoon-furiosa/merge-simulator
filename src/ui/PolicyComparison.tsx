@@ -1,11 +1,15 @@
+import type { CSSProperties } from "react";
 import type { ExperimentResult, MetricSummary } from "../sim/model";
-import { policyLabel } from "../sim/model";
+import { policyLabel } from "../sim/policyRegistry";
 import { formatDuration } from "./formatDuration";
+import "./policy-expansion.css";
 
 const pct = (value: number | null | undefined) => value == null ? "—" : `${(value * 100).toFixed(2)}%`;
 const num = (value: number | null | undefined, digits = 1) => value == null ? "—" : value.toFixed(digits);
 const mean = (summary: Record<string, MetricSummary>, key: string) => summary[key]?.mean ?? null;
-export function PolicyComparison({ result, onReplay }: { result: ExperimentResult; onReplay: (policyIndex: number) => void }) {
+const policyColor = (index: number) => `hsl(${Math.round((index * 137.508 + 158) % 360)} 52% 43%)`;
+
+export function PolicyComparison({ result, onReplay }: { result: ExperimentResult; onReplay: (policyId: string) => void }) {
   const points = result.results.map((item) => ({ x: mean(item.summary, "normalMergeTime.mean") ?? 0, y: mean(item.summary, "defectIngressRate") ?? 0 }));
   const maxX = Math.max(1, ...points.map((point) => point.x));
   const maxY = Math.max(0.01, ...points.map((point) => point.y));
@@ -18,21 +22,24 @@ export function PolicyComparison({ result, onReplay }: { result: ExperimentResul
       </div>
 
       <div className="metric-cards">
-        {result.results.map((item, index) => (
-          <article className={`metric-card accent-${index}`} key={item.policy.kind}>
-            <div className="card-top"><span>0{index + 1}</span><button onClick={() => onReplay(index)}>실행 재생 ↗</button></div>
-            <h3>{policyLabel(item.policy)}</h3>
-            <div className="hero-metric"><strong>{formatDuration(mean(item.summary, "normalMergeTime.mean"))}</strong><span>정상 PR 평균 머지</span></div>
-            <dl>
-              <div><dt>결함 PR 유입률</dt><dd>{pct(mean(item.summary, "defectIngressRate"))}</dd></div>
-              <div><dt>처리량</dt><dd>{num(mean(item.summary, "throughput"), 3)} /분</dd></div>
-              <div><dt>CI 실행</dt><dd>{num(mean(item.summary, "ciRuns"), 0)}회</dd></div>
-              <div><dt>CI 사용률</dt><dd>{pct(mean(item.summary, "ciUtilization"))}</dd></div>
-              <div><dt>상호작용 유입</dt><dd>{pct(mean(item.summary, "harmfulInteractionRate"))}</dd></div>
-              <div><dt>정상 PR 오격리</dt><dd>{num(mean(item.summary, "falseQuarantines"), 1)}</dd></div>
-            </dl>
-          </article>
-        ))}
+        {result.results.map((item, index) => {
+          const style = { "--policy-accent": policyColor(index) } as CSSProperties;
+          return (
+            <article className="metric-card policy-accent" key={item.policy.id} style={style} data-policy-id={item.policy.id}>
+              <div className="card-top"><span>{String(index + 1).padStart(2, "0")}</span><button onClick={() => onReplay(item.policy.id)}>실행 재생 ↗</button></div>
+              <h3>{policyLabel(item.policy)}</h3>
+              <div className="hero-metric"><strong>{formatDuration(mean(item.summary, "normalMergeTime.mean"))}</strong><span>정상 PR 평균 머지</span></div>
+              <dl>
+                <div><dt>결함 PR 유입률</dt><dd>{pct(mean(item.summary, "defectIngressRate"))}</dd></div>
+                <div><dt>처리량</dt><dd>{num(mean(item.summary, "throughput"), 3)} /분</dd></div>
+                <div><dt>CI 실행</dt><dd>{num(mean(item.summary, "ciRuns"), 0)}회</dd></div>
+                <div><dt>CI 사용률</dt><dd>{pct(mean(item.summary, "ciUtilization"))}</dd></div>
+                <div><dt>상호작용 유입</dt><dd>{pct(mean(item.summary, "harmfulInteractionRate"))}</dd></div>
+                <div><dt>정상 PR 오격리</dt><dd>{num(mean(item.summary, "falseQuarantines"), 1)}</dd></div>
+              </dl>
+            </article>
+          );
+        })}
       </div>
 
       <div className="analysis-grid">
@@ -42,9 +49,10 @@ export function PolicyComparison({ result, onReplay }: { result: ExperimentResul
             {[0, 1, 2, 3, 4].map((line) => <line key={line} x1="58" x2="600" y1={220 - line * 48} y2={220 - line * 48} />)}
             <text x="8" y="24">결함률</text><text x="510" y="252">머지 시간 →</text>
             {points.map((point, index) => {
+              const item = result.results[index];
               const x = 70 + (point.x / maxX) * 500;
               const y = 215 - (point.y / maxY) * 180;
-              return <g key={index}><circle className={`point point-${index}`} cx={x} cy={y} r="10" /><text x={x + 15} y={y + 5}>{policyLabel(result.results[index].policy)}</text></g>;
+              return <g key={item.policy.id}><circle className="point" style={{ fill: policyColor(index) }} cx={x} cy={y} r="10" /><text x={x + 15} y={y + 5}>{policyLabel(item.policy)}</text></g>;
             })}
           </svg>
         </article>

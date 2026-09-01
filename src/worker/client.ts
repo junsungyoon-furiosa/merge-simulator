@@ -1,4 +1,4 @@
-import type { ExperimentResult, PolicyConfig, RunResult, ScenarioConfig, SimEvent } from "../sim/model";
+import type { ExperimentResult, PolicyInstance, RunResult, ScenarioConfig, SimEvent } from "../sim/model";
 import { PROTOCOL_VERSION, type WorkerRequest, type WorkerResponse } from "./protocol";
 
 export interface RunCallbacks {
@@ -7,18 +7,18 @@ export interface RunCallbacks {
 }
 
 type RequestPayload =
-  | { type: "runExperiment"; scenario: ScenarioConfig; policies: PolicyConfig[] }
-  | { type: "replayRun"; scenario: ScenarioConfig; policy: PolicyConfig; repetition: number };
+  | { type: "runExperiment"; scenario: ScenarioConfig; policies: PolicyInstance[] }
+  | { type: "replayRun"; scenario: ScenarioConfig; policy: PolicyInstance; repetition: number };
 
 export class SimulationClient {
   private worker = new Worker(new URL("./simulation.worker.ts", import.meta.url), { type: "module" });
   private currentId?: string;
 
-  runExperiment(scenario: ScenarioConfig, policies: PolicyConfig[], callbacks: RunCallbacks = {}): Promise<ExperimentResult> {
+  runExperiment(scenario: ScenarioConfig, policies: PolicyInstance[], callbacks: RunCallbacks = {}): Promise<ExperimentResult> {
     return this.request<ExperimentResult>({ type: "runExperiment", scenario, policies }, callbacks, "experimentCompleted");
   }
 
-  replay(scenario: ScenarioConfig, policy: PolicyConfig, repetition: number, callbacks: RunCallbacks = {}): Promise<RunResult> {
+  replay(scenario: ScenarioConfig, policy: PolicyInstance, repetition: number, callbacks: RunCallbacks = {}): Promise<RunResult> {
     return this.request<RunResult>({ type: "replayRun", scenario, policy, repetition }, callbacks, "replayCompleted");
   }
 

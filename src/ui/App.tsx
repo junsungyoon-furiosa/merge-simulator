@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_POLICIES, DEFAULT_SCENARIO, type ExperimentResult, type PolicyConfig, type RunResult, type ScenarioConfig, type SimEvent } from "../sim/model";
+import { DEFAULT_SCENARIO, type ExperimentResult, type PolicyInstance, type RunResult, type ScenarioConfig, type SimEvent } from "../sim/model";
+import { DEFAULT_POLICIES } from "../sim/policyRegistry";
 import { downloadText, fromJson, resultToCsv, toJson } from "../storage/export";
 import { loadScenario, saveExperiment, saveScenario } from "../storage/database";
-import { scenarioSchema } from "../storage/schema";
+import { policyInstancesSchema, scenarioSchema } from "../storage/schema";
 import { SimulationClient } from "../worker/client";
 import { PolicyComparison } from "./PolicyComparison";
 import { RunReplay } from "./RunReplay";
@@ -10,7 +11,7 @@ import { ScenarioEditor } from "./ScenarioEditor";
 
 export function App() {
   const [scenario, setScenario] = useState<ScenarioConfig>(DEFAULT_SCENARIO);
-  const [policies, setPolicies] = useState<PolicyConfig[]>(DEFAULT_POLICIES);
+  const [policies, setPolicies] = useState<PolicyInstance[]>(DEFAULT_POLICIES);
   const [result, setResult] = useState<ExperimentResult>();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 1 });
@@ -37,7 +38,9 @@ export function App() {
 
   const run = async () => {
     const parsed = scenarioSchema.safeParse(scenario);
+    const parsedPolicies = policyInstancesSchema.safeParse(policies);
     if (!parsed.success) { setMessage(parsed.error.issues[0]?.message ?? "입력값을 확인하세요."); return; }
+    if (!parsedPolicies.success) { setMessage(parsedPolicies.error.issues[0]?.message ?? "정책 설정을 확인하세요."); return; }
     setRunning(true); setResult(undefined); setProgress({ done: 0, total: scenario.repetitions * policies.length }); setMessage("숨겨진 PR 세계를 만들고 정책을 비교하고 있습니다.");
     try {
       const experiment = await client.current!.runExperiment(scenario, policies, { onProgress: (done, total) => setProgress({ done, total }) });
@@ -46,9 +49,9 @@ export function App() {
     finally { setRunning(false); }
   };
 
-  const replay = async (policyIndex: number) => {
+  const replay = async (policyId: string) => {
     const experiment = result;
-    const policy = experiment?.results[policyIndex]?.policy;
+    const policy = experiment?.results.find((item) => item.policy.id === policyId)?.policy;
     if (!experiment || !policy) return;
     setReplayEvents([]); setReplayTotalPrs(experiment.scenario.prCount); setReplayLoading(true);
     try {

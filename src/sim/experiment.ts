@@ -1,6 +1,6 @@
 import { runSimulation } from "./engine";
 import { describe } from "./metrics";
-import type { ExperimentResult, MetricSummary, PolicyConfig, PolicyExperimentResult, RunMetrics, ScenarioConfig } from "./model";
+import type { ExperimentResult, MetricSummary, PolicyExperimentResult, PolicyInstance, RunMetrics, ScenarioConfig } from "./model";
 
 const METRIC_PATHS = [
   "mergedPrs", "defectIngressRate", "harmfulInteractionRate", "normalMergeTime.mean", "normalMergeTime.p95",
@@ -20,12 +20,12 @@ export function summarize(values: number[]): MetricSummary {
   return { mean: stats.mean, min: stats.min, max: stats.max, p50: stats.p50, p95: stats.p95, ci95Low: stats.mean - 1.96 * standardError, ci95High: stats.mean + 1.96 * standardError };
 }
 
-export function summarizeRuns(policy: PolicyConfig, runs: PolicyExperimentResult["runs"]): PolicyExperimentResult {
+export function summarizeRuns(policy: PolicyInstance, runs: PolicyExperimentResult["runs"]): PolicyExperimentResult {
   const summary = Object.fromEntries(METRIC_PATHS.map((path) => [path, summarize(runs.map((run) => valueAt(run.metrics, path)).filter((value): value is number => value !== null))]));
   return { policy, runs, summary };
 }
 
-export function runExperiment(config: ScenarioConfig, policies: PolicyConfig[], onProgress?: (done: number, total: number) => void, isCancelled?: () => boolean): ExperimentResult {
+export function runExperiment(config: ScenarioConfig, policies: PolicyInstance[], onProgress?: (done: number, total: number) => void, isCancelled?: () => boolean): ExperimentResult {
   const started = performance.now();
   const total = config.repetitions * policies.length;
   let done = 0;

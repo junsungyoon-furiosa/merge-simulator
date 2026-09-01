@@ -1,13 +1,24 @@
 import { expect, test } from "@playwright/test";
 
-test("runs and replays a small three-policy comparison", async ({ page }) => {
+test("manages, runs, and replays policy instances", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /머지 시뮬레이터/ })).toBeVisible();
+
   await page.getByLabel("전체 PR").fill("321");
-  await page.getByLabel("배치 분할 크기").fill("16");
+  await page.getByLabel("2번 배치 분할 배치 크기").fill("16");
+  await page.getByLabel("추가할 정책").selectOption("batchSplit");
+  await page.getByRole("button", { name: "정책 추가" }).click();
+  await expect(page.locator(".policy-instance")).toHaveCount(4);
+  await page.getByRole("button", { name: "4번 배치 분할 복제" }).click();
+  await expect(page.locator(".policy-instance")).toHaveCount(5);
+  const ids = await page.locator(".policy-instance").evaluateAll((items) => items.map((item) => item.getAttribute("data-policy-id")));
+  expect(new Set(ids).size).toBe(ids.length);
+
   await page.getByRole("button", { name: "기본값으로 초기화" }).click();
+  await expect(page.locator(".policy-instance")).toHaveCount(3);
   await expect(page.getByLabel("전체 PR")).toHaveValue("500");
-  await expect(page.getByLabel("배치 분할 크기")).toHaveValue("8");
+  await expect(page.getByLabel("2번 배치 분할 배치 크기")).toHaveValue("8");
+
   await page.getByLabel("전체 PR").fill("100");
   await page.getByLabel("목표 머지").fill("80");
   await page.getByLabel("정책당 시뮬레이션 횟수").fill("10");
