@@ -31,19 +31,19 @@ const descriptions = {
   individualDefect: "각 PR이 다른 PR과 무관한 개별 결함을 가질 확률입니다. 실제 결함 여부는 정책에 공개되지 않습니다.",
   interactions: "PR 100개당 생성할 상호작용 결함 집합 수의 평균입니다. 실제 개수는 포아송 분포로 추첨됩니다.",
   interactionSize: "하나의 상호작용 결함 집합에 포함될 수 있는 최대 PR 수입니다. 구성 PR이 모두 함께 있을 때 결함이 발생합니다.",
-  ciMin: "CI 한 번의 실행시간 최솟값입니다. 실행시간은 최소와 최대 사이에서 균등하게 추첨되며 배치 크기와 무관합니다.",
-  ciMax: "CI 한 번의 실행시간 최댓값입니다. 같은 배치를 재검사해도 실행시간은 다시 추첨됩니다.",
+  ciFailureDuration: "CI가 실패로 판정한 실행의 소요시간 구간입니다. 표시된 확률만큼의 실행시간이 하한과 상한 사이에 나오며, 나머지는 양쪽 범위 밖에서 나올 수 있습니다.",
+  ciSuccessDuration: "CI가 성공으로 판정한 실행의 소요시간 구간입니다. 성공 실행은 실패 실행과 별도의 분포에서 시간을 추첨합니다.",
   falseNegative: "실제로 비정상인 후보 master를 CI가 성공으로 잘못 판정할 확률입니다. 이 경우 결함 배치도 즉시 머지됩니다.",
   falsePositive: "실제로 정상인 후보 master를 CI가 실패로 잘못 판정할 확률입니다. 단독 CI라면 정상 PR도 격리될 수 있습니다.",
   llmHit: "실패 배치의 실제 범인 PR 각각을 LLM이 지목할 확률입니다. 지목만으로는 격리되지 않으며 단독 CI 실패가 필요합니다.",
   llmFalseAccusation: "실패 배치의 정상 PR 각각을 LLM이 범인으로 잘못 지목할 확률입니다. 값이 높을수록 불필요한 후속 검사가 늘 수 있습니다.",
-  llmMin: "LLM 호출 한 번의 최소 실행시간입니다. 서로 다른 실패 배치의 LLM 호출은 동시에 진행될 수 있습니다.",
-  llmMax: "LLM 호출 한 번의 최대 실행시간입니다. 호출시간은 최소와 최대 사이에서 균등하게 추첨됩니다.",
+  llmDuration: "LLM 호출 한 번의 소요시간 구간입니다. 표시된 확률만큼의 호출시간이 하한과 상한 사이에 나오며, 서로 다른 실패 배치의 호출은 동시에 진행될 수 있습니다.",
   ciCost: "CI 실행 한 번의 비용입니다. 비워두면 비용을 계산하지 않으며 화폐나 크레딧 등 단위는 사용자가 일관되게 정합니다.",
   llmCost: "LLM 호출 한 번의 비용입니다. 비워두면 비용을 계산하지 않으며 완료된 호출 수와 곱해 총비용을 구합니다.",
 } as const;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const coveragePercent = (coverage: number) => Number((coverage * 100).toFixed(4));
 
 function Field({ title, description, unit, wide = false, children }: FieldProps) {
   const inputId = useId();
@@ -118,11 +118,17 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
 
         <div className="section-rule"><span>CI 테스트</span></div>
         <div className="field-grid">
-          <Field title="CI 최소 시간" description={descriptions.ciMin} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.duration.kind === "uniform" ? scenario.ci.duration.min : 50} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, duration: { kind: "uniform", min: Number(event.target.value), max: scenario.ci.duration.kind === "uniform" ? Math.max(Number(event.target.value), scenario.ci.duration.max) : 70 } } })} />}
+          <Field title={"CI 실패 시간 " + coveragePercent(scenario.ci.failureDuration.coverage) + "% 하한"} description={descriptions.ciFailureDuration} unit="분">
+            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.failureDuration.lower} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, failureDuration: { ...scenario.ci.failureDuration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), scenario.ci.failureDuration.upper) } } })} />}
           </Field>
-          <Field title="CI 최대 시간" description={descriptions.ciMax} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.duration.kind === "uniform" ? scenario.ci.duration.max : 70} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, duration: { kind: "uniform", min: scenario.ci.duration.kind === "uniform" ? Math.min(scenario.ci.duration.min, Number(event.target.value)) : 50, max: Number(event.target.value) } } })} />}
+          <Field title={"CI 실패 시간 " + coveragePercent(scenario.ci.failureDuration.coverage) + "% 상한"} description={descriptions.ciFailureDuration} unit="분">
+            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.failureDuration.upper} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, failureDuration: { ...scenario.ci.failureDuration, lower: Math.min(scenario.ci.failureDuration.lower, Number(event.target.value)), upper: Number(event.target.value) } } })} />}
+          </Field>
+          <Field title={"CI 성공 시간 " + coveragePercent(scenario.ci.successDuration.coverage) + "% 하한"} description={descriptions.ciSuccessDuration} unit="분">
+            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.successDuration.lower} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, successDuration: { ...scenario.ci.successDuration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), scenario.ci.successDuration.upper) } } })} />}
+          </Field>
+          <Field title={"CI 성공 시간 " + coveragePercent(scenario.ci.successDuration.coverage) + "% 상한"} description={descriptions.ciSuccessDuration} unit="분">
+            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.successDuration.upper} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, successDuration: { ...scenario.ci.successDuration, lower: Math.min(scenario.ci.successDuration.lower, Number(event.target.value)), upper: Number(event.target.value) } } })} />}
           </Field>
           <Field title="거짓 음성률" description={descriptions.falseNegative} unit="%">
             {(id) => <input id={id} type="number" min={0} max={100} step={0.1} value={scenario.ci.falseNegativeRate * 100} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, falseNegativeRate: Number(event.target.value) / 100 } })} />}
@@ -140,11 +146,11 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
           <Field title="LLM 오지목률" description={descriptions.llmFalseAccusation} unit="%">
             {(id) => <input id={id} type="number" min={0} max={100} value={scenario.llm.innocentFalseAccusationRate * 100} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, innocentFalseAccusationRate: Number(event.target.value) / 100 } })} />}
           </Field>
-          <Field title="LLM 최소 시간" description={descriptions.llmMin} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.llm.duration.kind === "uniform" ? scenario.llm.duration.min : 1} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, duration: { kind: "uniform", min: Number(event.target.value), max: scenario.llm.duration.kind === "uniform" ? Math.max(Number(event.target.value), scenario.llm.duration.max) : 3 } } })} />}
+          <Field title={"LLM 시간 " + coveragePercent(scenario.llm.duration.coverage) + "% 하한"} description={descriptions.llmDuration} unit="분">
+            {(id) => <input id={id} type="number" min={0.1} value={scenario.llm.duration.lower} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, duration: { ...scenario.llm.duration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), scenario.llm.duration.upper) } } })} />}
           </Field>
-          <Field title="LLM 최대 시간" description={descriptions.llmMax} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.llm.duration.kind === "uniform" ? scenario.llm.duration.max : 3} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, duration: { kind: "uniform", min: scenario.llm.duration.kind === "uniform" ? Math.min(scenario.llm.duration.min, Number(event.target.value)) : 1, max: Number(event.target.value) } } })} />}
+          <Field title={"LLM 시간 " + coveragePercent(scenario.llm.duration.coverage) + "% 상한"} description={descriptions.llmDuration} unit="분">
+            {(id) => <input id={id} type="number" min={0.1} value={scenario.llm.duration.upper} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, duration: { ...scenario.llm.duration, lower: Math.min(scenario.llm.duration.lower, Number(event.target.value)), upper: Number(event.target.value) } } })} />}
           </Field>
         </div>
 

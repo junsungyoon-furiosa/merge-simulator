@@ -1,10 +1,10 @@
 import type { ExperimentResult, PolicyInstance, RunResult, ScenarioConfig } from "../sim/model";
 import { policyLabel } from "../sim/policyRegistry";
-import { importSchema, normalizePolicyInstances, policyInstanceSchema } from "./schema";
+import { importSchema, normalizePolicyInstances, normalizeScenarioConfig, policyInstanceSchema } from "./schema";
 import { policyConfigSchema } from "../sim/policyRegistry";
 
 export function toJson(scenario: ScenarioConfig, policies: PolicyInstance[], result?: ExperimentResult, replay?: RunResult): string {
-  return JSON.stringify({ schemaVersion: 1, scenario, policies, result, replay }, null, 2);
+  return JSON.stringify({ schemaVersion: 2, scenario, policies, result, replay }, null, 2);
 }
 
 function normalizeResultPolicy(value: unknown, fallback: PolicyInstance | undefined, index: number): PolicyInstance {
@@ -31,13 +31,13 @@ export function normalizeExperimentResult(value: unknown, fallbackPolicies: Poli
       : item.runs;
     return { ...item, policy, runs };
   });
-  return { ...raw, policies: resultPolicies, results } as unknown as ExperimentResult;
+  return { ...raw, scenario: normalizeScenarioConfig(raw.scenario), policies: resultPolicies, results } as unknown as ExperimentResult;
 }
 
 export function fromJson(value: string): { scenario: ScenarioConfig; policies: PolicyInstance[]; result?: ExperimentResult } {
   const imported = importSchema.parse(JSON.parse(value));
   const policies = normalizePolicyInstances(imported.policies);
-  return { scenario: imported.scenario, policies, result: normalizeExperimentResult(imported.result, policies) };
+  return { scenario: normalizeScenarioConfig(imported.scenario), policies, result: normalizeExperimentResult(imported.result, policies) };
 }
 
 function csvCell(value: unknown): string {

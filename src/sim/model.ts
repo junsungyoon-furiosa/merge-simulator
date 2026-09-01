@@ -8,6 +8,14 @@ export type Distribution =
   | { kind: "exponential"; mean: number }
   | { kind: "logNormal"; median: number; sigma: number };
 
+export interface DurationInterval {
+  lower: number;
+  upper: number;
+  coverage: number;
+}
+
+export const DEFAULT_DURATION_COVERAGE = 0.95;
+
 export type PolicyConfig =
   | { kind: "sequential" }
   | { kind: "batchSplit"; batchSize: number; maxWait: number; splitRatio: number }
@@ -22,7 +30,7 @@ export interface PolicyInstance {
 }
 
 export interface ScenarioConfig {
-  schemaVersion: 1;
+  schemaVersion: 2;
   name: string;
   seed: string;
   prCount: number;
@@ -36,13 +44,14 @@ export interface ScenarioConfig {
     sizeWeights: Record<number, number>;
   };
   ci: {
-    duration: Distribution;
+    failureDuration: DurationInterval;
+    successDuration: DurationInterval;
     falseNegativeRate: number;
     falsePositiveRate: number;
     costPerRun?: number;
   };
   llm: {
-    duration: Distribution;
+    duration: DurationInterval;
     culpritHitRate: number;
     innocentFalseAccusationRate: number;
     costPerCall?: number;
@@ -50,7 +59,7 @@ export interface ScenarioConfig {
 }
 
 export const DEFAULT_SCENARIO: ScenarioConfig = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   name: "기본 비교 실험",
   seed: "demo-1",
   prCount: 500,
@@ -59,8 +68,17 @@ export const DEFAULT_SCENARIO: ScenarioConfig = {
   arrival: { kind: "exponential", mean: 10 },
   individualDefectProbability: 0.01,
   interactionDefects: { setsPerHundredPrs: 1, maxSize: 4, sizeWeights: { 2: 0.7, 3: 0.2, 4: 0.1 } },
-  ci: { duration: { kind: "uniform", min: 50, max: 70 }, falseNegativeRate: 0.01, falsePositiveRate: 0.01 },
-  llm: { duration: { kind: "uniform", min: 1, max: 3 }, culpritHitRate: 0.7, innocentFalseAccusationRate: 0.1 },
+  ci: {
+    failureDuration: { lower: 10, upper: 40, coverage: DEFAULT_DURATION_COVERAGE },
+    successDuration: { lower: 50, upper: 70, coverage: DEFAULT_DURATION_COVERAGE },
+    falseNegativeRate: 0.01,
+    falsePositiveRate: 0.01,
+  },
+  llm: {
+    duration: { lower: 1, upper: 3, coverage: DEFAULT_DURATION_COVERAGE },
+    culpritHitRate: 0.7,
+    innocentFalseAccusationRate: 0.1,
+  },
 };
 
 

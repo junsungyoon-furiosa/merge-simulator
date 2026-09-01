@@ -79,7 +79,7 @@ export function runSimulation(config: ScenarioConfig, policyInstance: PolicyInst
     transition(prIds, "ciRunning");
     const truth = actionableFor(prIds);
     const observedSuccess = truth.actualHealthy ? !ciOutcomeRng.bool(config.ci.falsePositiveRate) : ciOutcomeRng.bool(config.ci.falseNegativeRate);
-    const duration = ciDurationRng.sample(config.ci.duration);
+    const duration = ciDurationRng.sampleDuration(observedSuccess ? config.ci.successDuration : config.ci.failureDuration);
     emit("policyDecided", { prIds, batchId, data: { action: "submitCi" } });
     emit("ciStarted", { prIds, batchId, data: { masterVersion, masterHealthyAtStart: masterHealthy, duration, actualHealthy: truth.actualHealthy } });
     schedule(now + duration, PRIORITY.complete, { kind: "ciComplete", batchId, prIds, masterVersion, duration, actualHealthy: truth.actualHealthy, observedSuccess, newCauseIds: truth.newCauseIds, actionableCauses: truth.causes, allowLlm });
@@ -91,7 +91,7 @@ export function runSimulation(config: ScenarioConfig, policyInstance: PolicyInst
     llmInFlight.add(record.id);
     const culpritSet = new Set(record.actionableCauses.flat());
     const suspects = record.prIds.filter((id) => culpritSet.has(id) ? llmOutcomeRng.bool(config.llm.culpritHitRate) : llmOutcomeRng.bool(config.llm.innocentFalseAccusationRate));
-    const duration = llmDurationRng.sample(config.llm.duration);
+    const duration = llmDurationRng.sampleDuration(config.llm.duration);
     emit("policyDecided", { batchId: record.id, data: { action: "callLlm" } });
     emit("llmStarted", { batchId: record.id, prIds: record.prIds, data: { duration } });
     schedule(now + duration, PRIORITY.complete, { kind: "llmComplete", batchId: record.id, prIds: record.prIds, duration, suspects, actionableCauses: record.actionableCauses });

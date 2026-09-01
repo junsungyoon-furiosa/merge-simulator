@@ -39,6 +39,20 @@ test("JSON preserves current ids and imports the previous config-only shape", ()
   expect(new Set(legacy.policies.map((policy) => policy.id)).size).toBe(DEFAULT_POLICIES.length);
 });
 
+test("migrates schema v1 duration distributions to stored central intervals", () => {
+  const legacyScenario = {
+    ...DEFAULT_SCENARIO,
+    schemaVersion: 1,
+    ci: { duration: { kind: "uniform", min: 50, max: 70 }, falseNegativeRate: 0.01, falsePositiveRate: 0.01 },
+    llm: { duration: { kind: "uniform", min: 1, max: 3 }, culpritHitRate: 0.7, innocentFalseAccusationRate: 0.1 },
+  };
+  const imported = fromJson(JSON.stringify({ schemaVersion: 1, scenario: legacyScenario, policies: DEFAULT_POLICIES }));
+  expect(imported.scenario.schemaVersion).toBe(2);
+  expect(imported.scenario.ci.failureDuration).toEqual({ lower: 50, upper: 70, coverage: 0.95 });
+  expect(imported.scenario.ci.successDuration).toEqual({ lower: 50, upper: 70, coverage: 0.95 });
+  expect(imported.scenario.llm.duration).toEqual({ lower: 1, upper: 3, coverage: 0.95 });
+});
+
 test("JSON preserves bors scheduling settings", () => {
   const policies: PolicyInstance[] = [{
     id: "bors-fifo",
@@ -61,7 +75,7 @@ test("CSV distinguishes same-kind policy instances and includes their configs", 
 });
 
 test("imports a previous config-only experiment result with aligned instance ids", () => {
-  const currentResult = runExperiment({ ...DEFAULT_SCENARIO, prCount: 20, targetMergeCount: 10, repetitions: 1 }, DEFAULT_POLICIES);
+  const currentResult = runExperiment({ ...DEFAULT_SCENARIO, prCount: 100, targetMergeCount: 10, repetitions: 10 }, DEFAULT_POLICIES);
   const legacyResult = {
     ...currentResult,
     policies: currentResult.policies.map((policy) => policy.config),

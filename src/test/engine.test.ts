@@ -8,7 +8,7 @@ const scenario = (changes: Partial<ScenarioConfig> = {}): ScenarioConfig => ({
   targetMergeCount: 80,
   repetitions: 10,
   arrival: { kind: "fixed", value: 1 },
-  ci: { ...DEFAULT_SCENARIO.ci, duration: { kind: "fixed", value: 2 }, falseNegativeRate: 0, falsePositiveRate: 0 },
+  ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { lower: 2, upper: 2, coverage: 0.95 }, successDuration: { lower: 2, upper: 2, coverage: 0.95 }, falseNegativeRate: 0, falsePositiveRate: 0 },
   interactionDefects: { ...DEFAULT_SCENARIO.interactionDefects, setsPerHundredPrs: 0 },
   ...changes,
 });
@@ -38,10 +38,21 @@ describe("simulation engine", () => {
   });
 
   test("false negatives allow a defective master", () => {
-    const config = scenario({ individualDefectProbability: 1, targetMergeCount: 20, ci: { ...DEFAULT_SCENARIO.ci, duration: { kind: "fixed", value: 1 }, falseNegativeRate: 1, falsePositiveRate: 0 } });
+    const config = scenario({ individualDefectProbability: 1, targetMergeCount: 20, ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { lower: 1, upper: 1, coverage: 0.95 }, successDuration: { lower: 1, upper: 1, coverage: 0.95 }, falseNegativeRate: 1, falsePositiveRate: 0 } });
     const result = runSimulation(config, instance({ kind: "batchSplit", batchSize: 5, maxWait: 2, splitRatio: 0.5 }), 0);
     expect(result.metrics.mergedDefectivePrs).toBeGreaterThan(0);
     expect(result.metrics.masterBecameUnhealthy).toBe(1);
+  });
+
+  test("selects CI duration by the observed result", () => {
+    const durations = {
+      failureDuration: { lower: 2, upper: 2, coverage: 0.95 },
+      successDuration: { lower: 9, upper: 9, coverage: 0.95 },
+    };
+    const success = runSimulation(scenario({ individualDefectProbability: 0, ci: { ...DEFAULT_SCENARIO.ci, ...durations, falseNegativeRate: 0, falsePositiveRate: 0 } }), instance({ kind: "sequential" }), 0);
+    const failure = runSimulation(scenario({ individualDefectProbability: 1, targetMergeCount: 10, ci: { ...DEFAULT_SCENARIO.ci, ...durations, falseNegativeRate: 0, falsePositiveRate: 0 } }), instance({ kind: "sequential" }), 0);
+    expect(success.events.filter((event) => event.type === "ciStarted").every((event) => event.data?.duration === 9)).toBe(true);
+    expect(failure.events.filter((event) => event.type === "ciStarted").every((event) => event.data?.duration === 2)).toBe(true);
   });
 
   test("LLM never directly quarantines a PR", () => {

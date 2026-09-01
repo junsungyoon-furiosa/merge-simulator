@@ -12,8 +12,8 @@ const contractScenario: ScenarioConfig = {
   arrival: { kind: "fixed", value: 1 },
   individualDefectProbability: 0.15,
   interactionDefects: { ...DEFAULT_SCENARIO.interactionDefects, setsPerHundredPrs: 0 },
-  ci: { ...DEFAULT_SCENARIO.ci, duration: { kind: "fixed", value: 2 }, falseNegativeRate: 0, falsePositiveRate: 0 },
-  llm: { ...DEFAULT_SCENARIO.llm, duration: { kind: "fixed", value: 1 } },
+  ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { lower: 2, upper: 2, coverage: 0.95 }, successDuration: { lower: 2, upper: 2, coverage: 0.95 }, falseNegativeRate: 0, falsePositiveRate: 0 },
+  llm: { ...DEFAULT_SCENARIO.llm, duration: { lower: 1, upper: 1, coverage: 0.95 } },
 };
 
 describe.each(POLICY_DEFINITIONS)("$label policy contract", (definition) => {

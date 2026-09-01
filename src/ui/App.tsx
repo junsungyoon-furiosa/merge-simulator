@@ -94,7 +94,7 @@ export function App() {
           {result && <PolicyComparison result={result} onReplay={replay} />}
         </div>
       </main>
-      <footer><span>브라우저 안에서만 계산되고 저장됩니다.</span><span>schema v1 · deterministic seed</span></footer>
+      <footer><span>브라우저 안에서만 계산되고 저장됩니다.</span><span>schema v2 · deterministic seed</span></footer>
       {replayEvents && replayTotalPrs !== undefined && <RunReplay events={replayEvents} totalPrs={replayTotalPrs} loading={replayLoading} onClose={() => { setReplayEvents(undefined); setReplayTotalPrs(undefined); }} />}
     </div>
   );

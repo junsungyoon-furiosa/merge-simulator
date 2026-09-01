@@ -1,7 +1,7 @@
 import { openDB, type DBSchema } from "idb";
 import type { ExperimentResult, PolicyConfig, PolicyInstance, ScenarioConfig } from "../sim/model";
 import { normalizeExperimentResult } from "./export";
-import { normalizePolicyInstances } from "./schema";
+import { normalizePolicyInstances, normalizeScenarioConfig } from "./schema";
 
 interface MergeSimulatorDb extends DBSchema {
   scenarios: { key: string; value: { id: string; updatedAt: string; scenario: ScenarioConfig; policies: PolicyInstance[] | PolicyConfig[] } };
@@ -23,7 +23,7 @@ export async function saveScenario(scenario: ScenarioConfig, policies: PolicyIns
 export async function loadScenario(): Promise<{ scenario: ScenarioConfig; policies: PolicyInstance[] } | undefined> {
   const database = await db();
   const stored = await database.get("scenarios", "current");
-  return stored ? { scenario: stored.scenario, policies: normalizePolicyInstances(stored.policies) } : undefined;
+  return stored ? { scenario: normalizeScenarioConfig(stored.scenario), policies: normalizePolicyInstances(stored.policies) } : undefined;
 }
 
 export async function saveExperiment(result: ExperimentResult): Promise<void> {

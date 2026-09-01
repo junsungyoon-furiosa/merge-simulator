@@ -40,7 +40,7 @@ test("renders the simulator's primary action and registered default policies", (
 
 test("provides help tooltips for every scenario field", () => {
   render(<App />);
-  expect(screen.getAllByRole("button", { name: "도움말" })).toHaveLength(19);
+  expect(screen.getAllByRole("button", { name: "도움말" })).toHaveLength(21);
   expect(screen.getByText(/비정상인 후보 master를 CI가 성공으로 잘못 판정/)).toHaveAttribute("role", "tooltip");
 });
 
@@ -81,7 +81,7 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
 
   fireEvent.change(screen.getByLabelText("실험 이름"), { target: { value: "임의 설정" } });
   fireEvent.change(screen.getByLabelText("전체 PR"), { target: { value: "700" } });
-  fireEvent.change(screen.getByLabelText("CI 최소 시간"), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText("CI 실패 시간 95% 하한"), { target: { value: "5" } });
   fireEvent.change(screen.getByLabelText("LLM 적중률"), { target: { value: "25" } });
   fireEvent.change(screen.getByLabelText("CI 1회 비용"), { target: { value: "9" } });
   fireEvent.change(screen.getByLabelText("2번 배치 분할 배치 크기"), { target: { value: "16" } });
@@ -92,7 +92,7 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
 
   expect(screen.getByLabelText("실험 이름")).toHaveValue(DEFAULT_SCENARIO.name);
   expect(screen.getByLabelText("전체 PR")).toHaveValue(DEFAULT_SCENARIO.prCount);
-  expect(screen.getByLabelText("CI 최소 시간")).toHaveValue(50);
+  expect(screen.getByLabelText("CI 실패 시간 95% 하한")).toHaveValue(10);
   expect(screen.getByLabelText("LLM 적중률")).toHaveValue(70);
   expect(screen.getByLabelText("CI 1회 비용")).toHaveValue(null);
   expect(screen.getByLabelText("2번 배치 분할 배치 크기")).toHaveValue(8);
