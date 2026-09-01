@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { runExperiment } from "../sim/experiment";
-import { DEFAULT_SCENARIO, type PolicyConfig } from "../sim/model";
+import { DEFAULT_SCENARIO, type PolicyConfig, type PolicyInstance } from "../sim/model";
 import { DEFAULT_POLICIES } from "../sim/policyRegistry";
 import { fromJson, resultToCsv, toJson } from "../storage/export";
 import { normalizePolicyInstances, policyInstancesSchema } from "../storage/schema";
@@ -37,6 +37,14 @@ test("JSON preserves current ids and imports the previous config-only shape", ()
   const legacy = fromJson(legacyJson);
   expect(legacy.policies.map((policy) => policy.config)).toEqual(DEFAULT_POLICIES.map((policy) => policy.config));
   expect(new Set(legacy.policies.map((policy) => policy.id)).size).toBe(DEFAULT_POLICIES.length);
+});
+
+test("JSON preserves bors scheduling settings", () => {
+  const policies: PolicyInstance[] = [{
+    id: "bors-fifo",
+    config: { kind: "bors", maxBatchSize: 12, batchDelay: 20, splitBatchScheduling: "fifo" },
+  }];
+  expect(fromJson(toJson(DEFAULT_SCENARIO, policies)).policies).toEqual(policies);
 });
 
 test("CSV distinguishes same-kind policy instances and includes their configs", () => {

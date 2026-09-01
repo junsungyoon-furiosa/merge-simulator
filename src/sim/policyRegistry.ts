@@ -2,12 +2,14 @@ import { z } from "zod";
 import type { PolicyConfig, PolicyInstance, PolicyKind } from "./model";
 import {
   createBatchSplitPolicy,
+  createBorsPolicy,
   createLlmAssistedPolicy,
   createSequentialPolicy,
   type MergePolicy,
 } from "./policies";
 
 export interface PolicyNumberField {
+  type: "number";
   key: string;
   label: string;
   min: number;
@@ -15,13 +17,22 @@ export interface PolicyNumberField {
   step?: number;
 }
 
+export interface PolicySelectField {
+  type: "select";
+  key: string;
+  label: string;
+  options: readonly { value: string; label: string }[];
+}
+
+export type PolicyField = PolicyNumberField | PolicySelectField;
+
 export interface PolicyDefinition<C extends PolicyConfig = PolicyConfig> {
   kind: C["kind"];
   label: string;
   description: string;
   defaultConfig: C;
   schema: z.ZodType<C>;
-  fields: readonly PolicyNumberField[];
+  fields: readonly PolicyField[];
   create(config: C): MergePolicy;
   formatLabel(config: C): string;
 }
@@ -49,12 +60,40 @@ const batchSplitDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "batc
     splitRatio: z.number().gt(0).lt(1),
   }),
   fields: [
-    { key: "batchSize", label: "배치 크기", min: 2, max: 100, step: 1 },
-    { key: "maxWait", label: "최대 대기", min: 0, step: 1 },
-    { key: "splitRatio", label: "분할 비율", min: 0.01, max: 0.99, step: 0.05 },
+    { type: "number", key: "batchSize", label: "배치 크기", min: 2, max: 100, step: 1 },
+    { type: "number", key: "maxWait", label: "최대 대기", min: 0, step: 1 },
+    { type: "number", key: "splitRatio", label: "분할 비율", min: 0.01, max: 0.99, step: 0.05 },
   ],
   create: createBatchSplitPolicy,
   formatLabel: (config) => `배치 분할 (배치 ${config.batchSize} · 대기 ${config.maxWait} · 분할 ${Math.round(config.splitRatio * 100)}%)`,
+};
+
+const borsDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "bors" }>> = {
+  kind: "bors",
+  label: "Bors 기준",
+  description: "r+된 PR을 지연 배치로 검사하고 실패 배치를 정확히 이분",
+  defaultConfig: { kind: "bors", maxBatchSize: 8, batchDelay: 30, splitBatchScheduling: "fifo" },
+  schema: z.object({
+    kind: z.literal("bors"),
+    maxBatchSize: z.number().int().min(2).max(100),
+    batchDelay: z.number().nonnegative(),
+    splitBatchScheduling: z.enum(["beforeFresh", "fifo"]),
+  }),
+  fields: [
+    { type: "number", key: "maxBatchSize", label: "최대 배치 크기", min: 2, max: 100, step: 1 },
+    { type: "number", key: "batchDelay", label: "배치 지연", min: 0, step: 1 },
+    {
+      type: "select",
+      key: "splitBatchScheduling",
+      label: "분할 배치 순서",
+      options: [
+        { value: "fifo", label: "전체 배치 FIFO" },
+        { value: "beforeFresh", label: "신규 PR보다 우선" },
+      ],
+    },
+  ],
+  create: createBorsPolicy,
+  formatLabel: (config) => `Bors 기준 (최대 ${config.maxBatchSize} · 지연 ${config.batchDelay} · ${config.splitBatchScheduling === "fifo" ? "FIFO" : "분할 우선"})`,
 };
 
 const llmAssistedDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "llmAssisted" }>> = {
@@ -68,8 +107,8 @@ const llmAssistedDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "llm
     maxWait: z.number().nonnegative(),
   }),
   fields: [
-    { key: "batchSize", label: "배치 크기", min: 2, max: 100, step: 1 },
-    { key: "maxWait", label: "최대 대기", min: 0, step: 1 },
+    { type: "number", key: "batchSize", label: "배치 크기", min: 2, max: 100, step: 1 },
+    { type: "number", key: "maxWait", label: "최대 대기", min: 0, step: 1 },
   ],
   create: createLlmAssistedPolicy,
   formatLabel: (config) => `LLM 보조 (배치 ${config.batchSize} · 대기 ${config.maxWait})`,
@@ -78,6 +117,7 @@ const llmAssistedDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "llm
 export const POLICY_DEFINITIONS = [
   sequentialDefinition,
   batchSplitDefinition,
+  borsDefinition,
   llmAssistedDefinition,
 ] as const;
 
@@ -92,10 +132,11 @@ const policySchemas = POLICY_DEFINITIONS.map((definition) => definition.schema) 
 ];
 export const policyConfigSchema: z.ZodType<PolicyConfig> = z.union(policySchemas);
 
-export const DEFAULT_POLICIES: PolicyInstance[] = POLICY_DEFINITIONS.map((definition) => ({
-  id: `default-${definition.kind}`,
-  config: structuredClone(definition.defaultConfig),
-}));
+const DEFAULT_POLICY_KINDS: PolicyKind[] = ["sequential", "batchSplit", "llmAssisted"];
+export const DEFAULT_POLICIES: PolicyInstance[] = DEFAULT_POLICY_KINDS.map((kind) => {
+  const definition = getPolicyDefinition(kind);
+  return { id: `default-${kind}`, config: structuredClone(definition.defaultConfig) };
+});
 
 export function getPolicyDefinition(kind: string): PolicyDefinition {
   const definition = definitionByKind.get(kind as PolicyKind);

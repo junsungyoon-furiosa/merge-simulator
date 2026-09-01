@@ -19,6 +19,15 @@ test("manages, runs, and replays policy instances", async ({ page }) => {
   await expect(page.getByLabel("전체 PR")).toHaveValue("500");
   await expect(page.getByLabel("2번 배치 분할 배치 크기")).toHaveValue("8");
 
+  await page.getByLabel("추가할 정책").selectOption("bors");
+  await page.getByRole("button", { name: "정책 추가" }).click();
+  await expect(page.locator(".policy-instance")).toHaveCount(4);
+  await expect(page.getByLabel("4번 Bors 기준 최대 배치 크기")).toHaveValue("8");
+  await page.getByLabel("4번 Bors 기준 분할 배치 순서").selectOption("beforeFresh");
+  await expect(page.getByLabel("4번 Bors 기준 분할 배치 순서")).toHaveValue("beforeFresh");
+  await page.getByRole("button", { name: "4번 Bors 기준 제거" }).click();
+  await expect(page.locator(".policy-instance")).toHaveCount(3);
+
   await page.getByLabel("전체 PR").fill("100");
   await page.getByLabel("목표 머지").fill("80");
   await page.getByLabel("정책당 시뮬레이션 횟수").fill("10");

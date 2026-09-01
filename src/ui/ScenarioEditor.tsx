@@ -69,7 +69,7 @@ function Field({ title, description, unit, wide = false, children }: FieldProps)
 export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPolicies, onReset }: Props) {
   const [newPolicyKind, setNewPolicyKind] = useState<PolicyKind>("sequential");
   const setNumber = (key: "prCount" | "targetMergeCount" | "repetitions", value: number) => onScenario({ ...scenario, [key]: value });
-  const setPolicyNumber = (policyId: string, key: string, value: number) => {
+  const setPolicyValue = (policyId: string, key: string, value: number | string) => {
     onPolicies(policies.map((policy) => policy.id === policyId
       ? { ...policy, config: { ...policy.config, [key]: value } as PolicyConfig }
       : policy));
@@ -168,7 +168,7 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
         <div className="policy-list">
           {policies.map((policy, index) => {
             const definition = getPolicyDefinition(policy.config.kind);
-            const values = policy.config as unknown as Record<string, number>;
+            const values = policy.config as unknown as Record<string, number | string>;
             return (
               <article className="policy-instance" key={policy.id} data-policy-id={policy.id}>
                 <div className="policy-instance-heading">
@@ -180,15 +180,25 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
                     {definition.fields.map((field) => (
                       <label key={field.key}>
                         <span>{field.label}</span>
-                        <input
-                          aria-label={`${index + 1}번 ${definition.label} ${field.label}`}
-                          type="number"
-                          min={field.min}
-                          max={field.max}
-                          step={field.step}
-                          value={values[field.key]}
-                          onChange={(event) => setPolicyNumber(policy.id, field.key, Number(event.target.value))}
-                        />
+                        {field.type === "number" ? (
+                          <input
+                            aria-label={`${index + 1}번 ${definition.label} ${field.label}`}
+                            type="number"
+                            min={field.min}
+                            max={field.max}
+                            step={field.step}
+                            value={values[field.key]}
+                            onChange={(event) => setPolicyValue(policy.id, field.key, Number(event.target.value))}
+                          />
+                        ) : (
+                          <select
+                            aria-label={`${index + 1}번 ${definition.label} ${field.label}`}
+                            value={values[field.key]}
+                            onChange={(event) => setPolicyValue(policy.id, field.key, event.target.value)}
+                          >
+                            {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                        )}
                       </label>
                     ))}
                   </div>

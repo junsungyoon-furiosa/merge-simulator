@@ -22,6 +22,13 @@ export interface MergePolicy {
 
 interface Task { prIds: PrId[]; allowLlm: boolean }
 interface Arrival { id: PrId; time: number }
+interface BorsBatch {
+  prIds: PrId[];
+  createdAt: number;
+  readyAt: number;
+  origin: "fresh" | "split";
+  order: number;
+}
 
 class BasePolicy implements MergePolicy {
   readonly config: PolicyConfig;
@@ -83,6 +90,68 @@ class BatchSplitPolicy extends BasePolicy {
   }
 }
 
+class BorsPolicy implements MergePolicy {
+  declare readonly config: Extract<PolicyConfig, { kind: "bors" }>;
+  private pending: BorsBatch[] = [];
+  private failedToSplit: PrId[][] = [];
+  private nextOrder = 0;
+
+  constructor(config: Extract<PolicyConfig, { kind: "bors" }>) { this.config = config; }
+
+  onArrival(prId: PrId, arrivalTime: number): void {
+    const openFresh = [...this.pending].reverse().find((batch) =>
+      batch.origin === "fresh" && batch.prIds.length < this.config.maxBatchSize);
+    if (openFresh) {
+      openFresh.prIds.push(prId);
+      return;
+    }
+    this.pending.push(this.makeBatch([prId], arrivalTime, "fresh"));
+  }
+
+  onBatchFailed(_batchId: BatchId, prIds: PrId[]): void {
+    if (prIds.length <= 1) return;
+    const cut = Math.ceil(prIds.length / 2);
+    this.failedToSplit.push(prIds.slice(0, cut), prIds.slice(cut));
+  }
+
+  onLlmCompleted(_batchId: BatchId, _prIds: PrId[], _suspects: PrId[]): void { /* bors does not use LLM */ }
+
+  decide(observation: PolicyObservation): PolicyAction[] {
+    this.materializeSplitBatches(observation.now);
+    if (!observation.ciIdle || !this.pending.length) return [];
+
+    const ready = this.pending
+      .map((batch, index) => ({ batch, index }))
+      .filter(({ batch }) =>
+        batch.readyAt <= observation.now || (observation.allArrived && batch.origin === "fresh"));
+
+    if (!ready.length) {
+      return [{ type: "waitUntil", time: Math.min(...this.pending.map((batch) => batch.readyAt)) }];
+    }
+
+    const readySplits = ready.filter(({ batch }) => batch.origin === "split");
+    const candidates = this.config.splitBatchScheduling === "beforeFresh" && readySplits.length ? readySplits : ready;
+    const chosen = candidates.reduce((first, candidate) =>
+      candidate.batch.createdAt < first.batch.createdAt ||
+      (candidate.batch.createdAt === first.batch.createdAt && candidate.batch.order < first.batch.order)
+        ? candidate : first);
+    const [{ prIds }] = this.pending.splice(chosen.index, 1);
+    return [{ type: "submitCi", prIds, allowLlm: false }];
+  }
+
+  hasPendingWork(): boolean { return this.pending.length > 0 || this.failedToSplit.length > 0; }
+
+  private materializeSplitBatches(now: number): void {
+    if (!this.failedToSplit.length) return;
+    this.pending.push(...this.failedToSplit.map((prIds) => this.makeBatch(prIds, now, "split")));
+    this.failedToSplit = [];
+  }
+
+  private makeBatch(prIds: PrId[], createdAt: number, origin: BorsBatch["origin"]): BorsBatch {
+    return { prIds, createdAt, readyAt: createdAt + this.config.batchDelay, origin, order: this.nextOrder++ };
+  }
+}
+
 class LlmAssistedPolicy extends BasePolicy {
   declare readonly config: Extract<PolicyConfig, { kind: "llmAssisted" }>;
 
@@ -124,4 +193,5 @@ class LlmAssistedPolicy extends BasePolicy {
 
 export const createSequentialPolicy = (config: Extract<PolicyConfig, { kind: "sequential" }>): MergePolicy => new SequentialPolicy(config);
 export const createBatchSplitPolicy = (config: Extract<PolicyConfig, { kind: "batchSplit" }>): MergePolicy => new BatchSplitPolicy(config);
+export const createBorsPolicy = (config: Extract<PolicyConfig, { kind: "bors" }>): MergePolicy => new BorsPolicy(config);
 export const createLlmAssistedPolicy = (config: Extract<PolicyConfig, { kind: "llmAssisted" }>): MergePolicy => new LlmAssistedPolicy(config);

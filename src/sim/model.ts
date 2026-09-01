@@ -11,6 +11,7 @@ export type Distribution =
 export type PolicyConfig =
   | { kind: "sequential" }
   | { kind: "batchSplit"; batchSize: number; maxWait: number; splitRatio: number }
+  | { kind: "bors"; maxBatchSize: number; batchDelay: number; splitBatchScheduling: "beforeFresh" | "fifo" }
   | { kind: "llmAssisted"; batchSize: number; maxWait: number };
 
 export type PolicyKind = PolicyConfig["kind"];

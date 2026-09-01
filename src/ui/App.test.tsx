@@ -35,6 +35,7 @@ test("renders the simulator's primary action and registered default policies", (
   expect(screen.getAllByText(/순차 CI/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/배치 분할/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/LLM 보조/).length).toBeGreaterThan(0);
+  expect(screen.getByRole("option", { name: "Bors 기준" })).toBeInTheDocument();
 });
 
 test("provides help tooltips for every scenario field", () => {
@@ -58,6 +59,20 @@ test("adds, duplicates, and removes policy instances with unique ids", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "5번 배치 분할 제거" }));
   expect(container.querySelectorAll(".policy-instance")).toHaveLength(4);
+});
+
+test("adds and configures the registered bors policy", () => {
+  render(<App />);
+  fireEvent.change(screen.getByLabelText("추가할 정책"), { target: { value: "bors" } });
+  fireEvent.click(screen.getByRole("button", { name: "정책 추가" }));
+
+  expect(screen.getByText("Bors 기준", { selector: ".policy-instance-heading strong" })).toBeInTheDocument();
+  expect(screen.getByLabelText("4번 Bors 기준 최대 배치 크기")).toHaveValue(8);
+  expect(screen.getByLabelText("4번 Bors 기준 배치 지연")).toHaveValue(30);
+  expect(screen.getByLabelText("4번 Bors 기준 분할 배치 순서")).toHaveValue("fifo");
+
+  fireEvent.change(screen.getByLabelText("4번 Bors 기준 분할 배치 순서"), { target: { value: "beforeFresh" } });
+  expect(screen.getByLabelText("4번 Bors 기준 분할 배치 순서")).toHaveValue("beforeFresh");
 });
 
 test("resets all scenario and policy inputs to recommended defaults", async () => {
