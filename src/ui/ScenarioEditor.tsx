@@ -11,6 +11,7 @@ interface Props {
   onScenario: (scenario: ScenarioConfig) => void;
   onPolicies: (policies: PolicyInstance[]) => void;
   onReset: () => void;
+  onOpenEvidence: () => void;
 }
 
 interface FieldProps {
@@ -66,7 +67,7 @@ function Field({ title, description, unit, wide = false, children }: FieldProps)
   );
 }
 
-export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPolicies, onReset }: Props) {
+export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPolicies, onReset, onOpenEvidence }: Props) {
   const [newPolicyKind, setNewPolicyKind] = useState<PolicyKind>("sequential");
   const setNumber = (key: "prCount" | "targetMergeCount" | "repetitions", value: number) => onScenario({ ...scenario, [key]: value });
   const setPolicyValue = (policyId: string, key: string, value: number | string) => {
@@ -88,6 +89,7 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
 
       <fieldset disabled={disabled}>
         <button type="button" className="reset-defaults-button" onClick={onReset}>기본값으로 초기화</button>
+        <button type="button" className="evidence-shortcut" onClick={onOpenEvidence}>환경값 의미와 산출근거 보기</button>
         <Field title="실험 이름" description={descriptions.name} wide>
           {(id) => <input id={id} value={scenario.name} onChange={(event) => onScenario({ ...scenario, name: event.target.value })} />}
         </Field>

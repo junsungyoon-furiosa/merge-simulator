@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { DEFAULT_SCENARIO, type ExperimentResult, type PolicyInstance, type RunResult, type ScenarioConfig, type SimEvent } from "../sim/model";
 import { DEFAULT_POLICIES } from "../sim/policyRegistry";
 import { downloadText, fromJson, resultToCsv, toJson } from "../storage/export";
@@ -9,7 +9,10 @@ import { PolicyComparison } from "./PolicyComparison";
 import { RunReplay } from "./RunReplay";
 import { ScenarioEditor } from "./ScenarioEditor";
 
+const EnvironmentEvidencePage = lazy(() => import("./EnvironmentEvidencePage"));
+
 export function App() {
+  const [view, setView] = useState<"simulation" | "evidence">("simulation");
   const [scenario, setScenario] = useState<ScenarioConfig>(DEFAULT_SCENARIO);
   const [policies, setPolicies] = useState<PolicyInstance[]>(DEFAULT_POLICIES);
   const [result, setResult] = useState<ExperimentResult>();
@@ -69,6 +72,7 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand"><div className="brand-mark"><span /><span /><span /></div><div><b>MERGE SIMULATOR</b></div></div>
+        <nav className="view-switch" aria-label="작업 화면"><button type="button" aria-current={view === "simulation" ? "page" : undefined} onClick={() => setView("simulation")}>시뮬레이션</button><button type="button" aria-current={view === "evidence" ? "page" : undefined} onClick={() => setView("evidence")}>환경값 근거</button></nav>
         <div className="top-actions">
           <button onClick={() => importRef.current?.click()}>불러오기</button>
           <input ref={importRef} hidden type="file" accept="application/json" onChange={(event) => event.target.files?.[0] && importFile(event.target.files[0])} />
@@ -78,8 +82,8 @@ export function App() {
         </div>
       </header>
 
-      <main>
-        <ScenarioEditor scenario={scenario} policies={policies} disabled={running} onScenario={setScenario} onPolicies={setPolicies} onReset={resetDefaults} />
+      {view === "simulation" ? <main>
+        <ScenarioEditor scenario={scenario} policies={policies} disabled={running} onScenario={setScenario} onPolicies={setPolicies} onReset={resetDefaults} onOpenEvidence={() => setView("evidence")} />
         <div className="workspace">
           <section className="hero">
             <h1><em>Merge Simulator</em><br/>머지 시뮬레이터</h1>
@@ -93,8 +97,8 @@ export function App() {
           {running && <section className="running-state"><div className="orbit"><i /><i /><i /></div><strong>{progress.done} / {progress.total}</strong></section>}
           {result && <PolicyComparison result={result} onReplay={replay} />}
         </div>
-      </main>
-      <footer><span>브라우저 안에서만 계산되고 저장됩니다.</span><span>schema v2 · deterministic seed</span></footer>
+      </main> : <Suspense fallback={<main className="evidence-page"><p>환경값 근거를 불러오는 중입니다.</p></main>}><EnvironmentEvidencePage scenario={scenario} onScenario={setScenario} /></Suspense>}
+      <footer><span>브라우저 안에서만 계산되고 저장됩니다.</span><span>schema v3 · deterministic seed</span></footer>
       {replayEvents && replayTotalPrs !== undefined && <RunReplay events={replayEvents} totalPrs={replayTotalPrs} loading={replayLoading} onClose={() => { setReplayEvents(undefined); setReplayTotalPrs(undefined); }} />}
     </div>
   );

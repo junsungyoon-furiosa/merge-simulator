@@ -4,6 +4,14 @@ test("manages, runs, and replays policy instances", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /머지 시뮬레이터/ })).toBeVisible();
 
+  const viewNavigation = page.getByRole("navigation", { name: "작업 화면" });
+  await viewNavigation.getByRole("button", { name: "환경값 근거" }).click();
+  await expect(page.getByRole("heading", { name: "환경값 근거" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "적용 가능한 관측·추정값 없음" })).toBeDisabled();
+  await page.getByRole("button", { name: "CI 거짓 음성률" }).click();
+  await expect(page.getByText("실제로 결함이 있는 후보 master를 CI가 성공으로 판정")).toBeVisible();
+  await viewNavigation.getByRole("button", { name: "시뮬레이션" }).click();
+
   await page.getByLabel("전체 PR").fill("321");
   await page.getByLabel("2번 배치 분할 배치 크기").fill("16");
   await page.getByLabel("추가할 정책").selectOption("batchSplit");

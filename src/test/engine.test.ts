@@ -22,6 +22,13 @@ describe("simulation engine", () => {
     expect(runSimulation(config, policy, 0)).toEqual(runSimulation(config, policy, 0));
   });
 
+  test("calibration metadata does not change events or metrics", () => {
+    const config = scenario();
+    const calibrated = { ...config, calibration: { parameters: { arrivalMean: { profileId: "test", profileVersion: 1, appliedValue: 1 } } } };
+    const policy = instance({ kind: "batchSplit", batchSize: 8, maxWait: 3, splitRatio: 0.5 });
+    expect(runSimulation(calibrated, policy, 0)).toEqual(runSimulation(config, policy, 0));
+  });
+
   test("healthy PRs merge and CI never overlaps", () => {
     const result = runSimulation(scenario({ individualDefectProbability: 0 }), instance({ kind: "sequential" }), 0);
     expect(result.metrics.endReason).toBe("targetReached");

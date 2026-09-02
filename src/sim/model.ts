@@ -14,6 +14,41 @@ export interface DurationInterval {
   coverage: number;
 }
 
+export type EnvironmentParameterId =
+  | "arrivalMean"
+  | "individualDefectProbability"
+  | "ciFailureDuration"
+  | "ciSuccessDuration"
+  | "ciFalseNegativeRate"
+  | "ciFalsePositiveRate"
+  | "llmCulpritHitRate"
+  | "llmInnocentFalseAccusationRate"
+  | "llmDuration";
+
+export interface EnvironmentParameterValueMap {
+  arrivalMean: number;
+  individualDefectProbability: number;
+  ciFailureDuration: DurationInterval;
+  ciSuccessDuration: DurationInterval;
+  ciFalseNegativeRate: number;
+  ciFalsePositiveRate: number;
+  llmCulpritHitRate: number;
+  llmInnocentFalseAccusationRate: number;
+  llmDuration: DurationInterval;
+}
+
+export type ParameterCalibrationSourceMap = {
+  [K in EnvironmentParameterId]?: {
+    profileId: string;
+    profileVersion: number;
+    appliedValue: EnvironmentParameterValueMap[K];
+  };
+};
+
+export interface ScenarioCalibration {
+  parameters: ParameterCalibrationSourceMap;
+}
+
 export const DEFAULT_DURATION_COVERAGE = 0.95;
 
 export type PolicyConfig =
@@ -30,7 +65,7 @@ export interface PolicyInstance {
 }
 
 export interface ScenarioConfig {
-  schemaVersion: 2;
+  schemaVersion: 3;
   name: string;
   seed: string;
   prCount: number;
@@ -56,10 +91,11 @@ export interface ScenarioConfig {
     innocentFalseAccusationRate: number;
     costPerCall?: number;
   };
+  calibration?: ScenarioCalibration;
 }
 
 export const DEFAULT_SCENARIO: ScenarioConfig = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   name: "기본 비교 실험",
   seed: "demo-1",
   prCount: 500,

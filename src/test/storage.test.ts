@@ -47,10 +47,37 @@ test("migrates schema v1 duration distributions to stored central intervals", ()
     llm: { duration: { kind: "uniform", min: 1, max: 3 }, culpritHitRate: 0.7, innocentFalseAccusationRate: 0.1 },
   };
   const imported = fromJson(JSON.stringify({ schemaVersion: 1, scenario: legacyScenario, policies: DEFAULT_POLICIES }));
-  expect(imported.scenario.schemaVersion).toBe(2);
+  expect(imported.scenario.schemaVersion).toBe(3);
   expect(imported.scenario.ci.failureDuration).toEqual({ lower: 50, upper: 70, coverage: 0.95 });
   expect(imported.scenario.ci.successDuration).toEqual({ lower: 50, upper: 70, coverage: 0.95 });
   expect(imported.scenario.llm.duration).toEqual({ lower: 1, upper: 3, coverage: 0.95 });
+});
+
+test("migrates schema v2 without inventing calibration metadata", () => {
+  const { calibration: _calibration, ...current } = DEFAULT_SCENARIO;
+  const previous = { ...current, schemaVersion: 2 };
+  const imported = fromJson(JSON.stringify({ schemaVersion: 2, scenario: previous, policies: DEFAULT_POLICIES }));
+  expect(imported.scenario.schemaVersion).toBe(3);
+  expect(imported.scenario.calibration).toBeUndefined();
+  expect(imported.scenario.ci).toEqual(DEFAULT_SCENARIO.ci);
+});
+
+test("round-trips v3 parameter calibration sources", () => {
+  const scenario = {
+    ...DEFAULT_SCENARIO,
+    calibration: { parameters: {
+      arrivalMean: { profileId: "bors-production-2026-q2", profileVersion: 1, appliedValue: 12 },
+      ciFailureDuration: { profileId: "bors-production-2026-q2", profileVersion: 1, appliedValue: { lower: 8, upper: 35, coverage: 0.95 } },
+    } },
+  };
+  const json = toJson(scenario, DEFAULT_POLICIES);
+  expect(JSON.parse(json).schemaVersion).toBe(3);
+  expect(fromJson(json).scenario).toEqual(scenario);
+});
+
+test("rejects unknown calibration parameter ids", () => {
+  const scenario = { ...DEFAULT_SCENARIO, calibration: { parameters: { unknownParameter: { profileId: "x", profileVersion: 1, appliedValue: 1 } } } };
+  expect(() => fromJson(JSON.stringify({ schemaVersion: 3, scenario, policies: DEFAULT_POLICIES }))).toThrow();
 });
 
 test("JSON preserves bors scheduling settings", () => {

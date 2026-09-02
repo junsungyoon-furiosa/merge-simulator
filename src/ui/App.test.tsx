@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { DEFAULT_SCENARIO, type ExperimentResult, type PolicyInstance } from "../sim/model";
 import { DEFAULT_POLICIES } from "../sim/policyRegistry";
@@ -36,6 +36,17 @@ test("renders the simulator's primary action and registered default policies", (
   expect(screen.getAllByText(/배치 분할/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/LLM 보조/).length).toBeGreaterThan(0);
   expect(screen.getByRole("option", { name: "Bors 기준" })).toBeInTheDocument();
+});
+
+test("opens the environment evidence catalog without changing the scenario", async () => {
+  render(<App />);
+  fireEvent.change(screen.getByLabelText("평균 도착 간격"), { target: { value: "17" } });
+  const navigation = screen.getByRole("navigation", { name: "작업 화면" });
+  fireEvent.click(within(navigation).getByRole("button", { name: "환경값 근거" }));
+  expect(await screen.findByRole("heading", { name: "환경값 근거" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "적용 가능한 관측·추정값 없음" })).toBeDisabled();
+  fireEvent.click(within(navigation).getByRole("button", { name: "시뮬레이션" }));
+  expect(screen.getByLabelText("평균 도착 간격")).toHaveValue(17);
 });
 
 test("provides help tooltips for every scenario field", () => {

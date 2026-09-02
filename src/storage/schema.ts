@@ -14,7 +14,28 @@ export const durationIntervalSchema = z.object({
   coverage: z.number().gt(0).lt(1),
 }).refine((value) => value.upper >= value.lower, "상한은 하한 이상이어야 합니다.");
 
-export const scenarioSchema = z.object({
+const probabilitySchema = z.number().min(0).max(1);
+const calibrationSourceSchema = <T extends z.ZodTypeAny>(valueSchema: T) => z.object({
+  profileId: z.string().min(1).max(200),
+  profileVersion: z.number().int().positive(),
+  appliedValue: valueSchema,
+}).strict();
+
+const calibrationParametersSchema = z.object({
+  arrivalMean: calibrationSourceSchema(z.number().positive()).optional(),
+  individualDefectProbability: calibrationSourceSchema(probabilitySchema).optional(),
+  ciFailureDuration: calibrationSourceSchema(durationIntervalSchema).optional(),
+  ciSuccessDuration: calibrationSourceSchema(durationIntervalSchema).optional(),
+  ciFalseNegativeRate: calibrationSourceSchema(probabilitySchema).optional(),
+  ciFalsePositiveRate: calibrationSourceSchema(probabilitySchema).optional(),
+  llmCulpritHitRate: calibrationSourceSchema(probabilitySchema).optional(),
+  llmInnocentFalseAccusationRate: calibrationSourceSchema(probabilitySchema).optional(),
+  llmDuration: calibrationSourceSchema(durationIntervalSchema).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "적용된 환경값 출처가 하나 이상이어야 합니다.");
+
+const scenarioCalibrationSchema = z.object({ parameters: calibrationParametersSchema }).strict();
+
+const scenarioV2Schema = z.object({
   schemaVersion: z.literal(2),
   name: z.string().min(1).max(100),
   seed: z.string().min(1).max(100),
@@ -43,6 +64,19 @@ export const scenarioSchema = z.object({
   }),
 }).refine((value) => value.targetMergeCount <= value.prCount, { path: ["targetMergeCount"], message: "목표 머지 수는 전체 PR 수 이하여야 합니다." });
 
+const scenarioV3EnvelopeSchema = z.object({
+  schemaVersion: z.literal(3),
+  calibration: scenarioCalibrationSchema.optional(),
+}).passthrough();
+
+export const scenarioSchema = scenarioV3EnvelopeSchema.transform((value, context) => {
+  const parsed = scenarioV2Schema.safeParse({ ...value, schemaVersion: 2 });
+  if (!parsed.success) {
+    parsed.error.issues.forEach((issue) => context.addIssue({ code: "custom", path: issue.path, message: issue.message }));
+    return z.NEVER;
+  }
+  return { ...parsed.data, schemaVersion: 3 as const, calibration: value.calibration };
+}) as z.ZodType<ScenarioConfig>;
 
 const legacyScenarioSchema = z.object({
   schemaVersion: z.literal(1),
@@ -91,12 +125,17 @@ function intervalFromLegacy(distribution: Distribution): DurationInterval {
 export function normalizeScenarioConfig(value: unknown): ScenarioConfig {
   const current = scenarioSchema.safeParse(value);
   if (current.success) return current.data;
+
+  const previous = scenarioV2Schema.safeParse(value);
+  if (previous.success) return scenarioSchema.parse({ ...previous.data, schemaVersion: 3 });
+
   const legacy = legacyScenarioSchema.parse(value);
   const ciDuration = intervalFromLegacy(legacy.ci.duration);
+  const { duration: _ciDuration, ...legacyCi } = legacy.ci;
   return scenarioSchema.parse({
     ...legacy,
-    schemaVersion: 2,
-    ci: { ...legacy.ci, duration: undefined, failureDuration: ciDuration, successDuration: ciDuration },
+    schemaVersion: 3,
+    ci: { ...legacyCi, failureDuration: ciDuration, successDuration: ciDuration },
     llm: { ...legacy.llm, duration: intervalFromLegacy(legacy.llm.duration) },
   });
 }
@@ -133,7 +172,7 @@ export function normalizePolicyInstances(value: unknown): PolicyInstance[] {
 }
 
 export const importSchema = z.object({
-  schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   scenario: z.unknown(),
   policies: storedPoliciesSchema,
   result: z.unknown().optional(),

@@ -4,7 +4,7 @@ import { importSchema, normalizePolicyInstances, normalizeScenarioConfig, policy
 import { policyConfigSchema } from "../sim/policyRegistry";
 
 export function toJson(scenario: ScenarioConfig, policies: PolicyInstance[], result?: ExperimentResult, replay?: RunResult): string {
-  return JSON.stringify({ schemaVersion: 2, scenario, policies, result, replay }, null, 2);
+  return JSON.stringify({ schemaVersion: 3, scenario, policies, result, replay }, null, 2);
 }
 
 function normalizeResultPolicy(value: unknown, fallback: PolicyInstance | undefined, index: number): PolicyInstance {
