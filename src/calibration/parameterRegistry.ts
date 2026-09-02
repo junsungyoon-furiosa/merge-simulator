@@ -24,10 +24,10 @@ const defineParameter = <K extends EnvironmentParameterId>(definition: Parameter
 
 export const PARAMETER_REGISTRY = [
   defineParameter({
-    id: "arrivalMean", group: "PR", label: "평균 도착 간격", unit: "분",
-    read: (scenario) => scenario.arrival.kind === "exponential" ? scenario.arrival.mean : undefined,
-    write: (scenario, value) => scenario.arrival.kind === "exponential" ? { ...scenario, arrival: { kind: "exponential", mean: value } } : scenario,
-    format: (value) => `${value}분`, equals: numberEquals,
+    id: "dailyPrCount", group: "PR", label: "근무일당 평균 PR 생성 수", unit: "PR/일",
+    read: (scenario) => scenario.arrival.meanPerDay,
+    write: (scenario, value) => ({ ...scenario, arrival: { ...scenario.arrival, meanPerDay: value } }),
+    format: (value) => String(value) + " PR/일", equals: numberEquals,
   }),
   defineParameter({
     id: "individualDefectProbability", group: "PR", label: "개별 결함률", unit: "%",

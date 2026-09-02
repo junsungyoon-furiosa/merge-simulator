@@ -1,5 +1,8 @@
-import type { HiddenWorld, PrId, ScenarioConfig } from "./model";
+import type { DailyArrivalProfile, HiddenWorld, PrId, ScenarioConfig } from "./model";
 import { deriveSeed, Random } from "./random";
+
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
 
 function weightedSize(weights: Record<number, number>, maxSize: number, rng: Random): number {
   const entries = Object.entries(weights)
@@ -21,25 +24,45 @@ function chooseMembers(prCount: number, size: number, rng: Random): PrId[] {
   return [...indexes].sort((a, b) => a - b).map((index) => `pr-${index + 1}`);
 }
 
+export function generateDailyArrivalTimes(arrival: DailyArrivalProfile, prCount: number, rng: Random): number[] {
+  const totalWeight = arrival.hourlyWeights.reduce((sum, weight) => sum + weight, 0);
+  if (arrival.meanPerDay < 0.1 || arrival.hourlyWeights.length !== HOURS_PER_DAY || arrival.hourlyWeights.some((weight) => weight < 0) || !(totalWeight > 0)) {
+    throw new RangeError("Daily arrival profile must have a positive mean and 24 non-empty hourly weights");
+  }
+
+  const arrivals: number[] = [];
+  for (let absoluteHour = 0; arrivals.length < prCount; absoluteHour += 1) {
+    const hourOfDay = absoluteHour % HOURS_PER_DAY;
+    const expectedCount = arrival.meanPerDay * arrival.hourlyWeights[hourOfDay] / totalWeight;
+    const offsets = Array.from({ length: rng.poisson(expectedCount) }, () => rng.next() * MINUTES_PER_HOUR)
+      .sort((left, right) => left - right);
+    const hourStart = absoluteHour * MINUTES_PER_HOUR;
+    for (const offset of offsets) {
+      arrivals.push(hourStart + offset);
+      if (arrivals.length === prCount) break;
+    }
+  }
+  return arrivals;
+}
+
 export function generateWorld(config: ScenarioConfig, repetition: number): HiddenWorld {
-  const rng = new Random(deriveSeed(config.seed, repetition, "world"));
-  let time = 0;
-  const prs = Array.from({ length: config.prCount }, (_, index) => {
-    time += index === 0 ? 0 : rng.sample(config.arrival);
-    return {
-      id: `pr-${index + 1}`,
-      index,
-      arrivalTime: time,
-      status: "scheduled" as const,
-      individualDefect: rng.bool(config.individualDefectProbability),
-    };
-  });
-  const interactionCount = rng.poisson((config.prCount / 100) * config.interactionDefects.setsPerHundredPrs);
+  const arrivalRng = new Random(deriveSeed(config.seed, repetition, "world", "arrivals"));
+  const defectRng = new Random(deriveSeed(config.seed, repetition, "world", "individual-defects"));
+  const interactionRng = new Random(deriveSeed(config.seed, repetition, "world", "interactions"));
+  const arrivalTimes = generateDailyArrivalTimes(config.arrival, config.prCount, arrivalRng);
+  const prs = arrivalTimes.map((arrivalTime, index) => ({
+    id: `pr-${index + 1}`,
+    index,
+    arrivalTime,
+    status: "scheduled" as const,
+    individualDefect: defectRng.bool(config.individualDefectProbability),
+  }));
+  const interactionCount = interactionRng.poisson((config.prCount / 100) * config.interactionDefects.setsPerHundredPrs);
   const interactions: HiddenWorld["interactions"] = [];
   const seen = new Set<string>();
   for (let attempt = 0; interactions.length < interactionCount && attempt < interactionCount * 20 + 20; attempt += 1) {
-    const size = weightedSize(config.interactionDefects.sizeWeights, config.interactionDefects.maxSize, rng);
-    const members = chooseMembers(config.prCount, size, rng);
+    const size = weightedSize(config.interactionDefects.sizeWeights, config.interactionDefects.maxSize, interactionRng);
+    const members = chooseMembers(config.prCount, size, interactionRng);
     const key = members.join("|");
     if (seen.has(key)) continue;
     seen.add(key);

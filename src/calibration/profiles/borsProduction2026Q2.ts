@@ -1,5 +1,5 @@
 import type { CalibrationProfile, ParameterEvidence } from "../model";
-import arrivalDetail from "../evidence/arrival-interval.md?raw";
+import arrivalDetail from "../evidence/daily-pr-count.md?raw";
 import defectDetail from "../evidence/individual-defect-rate.md?raw";
 import ciFailureDetail from "../evidence/ci-failure-duration.md?raw";
 import ciSuccessDetail from "../evidence/ci-success-duration.md?raw";
@@ -19,11 +19,11 @@ export const BORS_PRODUCTION_2026_Q2: CalibrationProfile = {
   version: 1,
   description: "Bors 운영 환경에서 관측하거나 추정할 값의 정의와 산출근거 초안입니다.",
   parameters: {
-    arrivalMean: draft({
-      realityMeaning: "PR이 Bors r+ 승인을 받아 머지 큐에 등록되는 사건 사이의 평균 시간 간격입니다.",
-      simulationMeaning: "지수분포로 다음 PR 도착 간격을 생성할 때 사용하는 평균입니다. 값이 작을수록 PR이 더 자주 도착합니다.",
-      method: ["r+ 등록 시각 조회", "연속 등록 시각 차이 계산", "대상 기간 필터링 후 대표값 계산"],
-      limitations: ["야간과 주말 포함 여부에 따라 값이 크게 달라질 수 있습니다."], detailMarkdown: arrivalDetail,
+    dailyPrCount: draft({
+      realityMeaning: "하루 동안 최초 r+ 승인을 받아 Bors 머지 큐에 들어온 PR 수의 평균입니다.",
+      simulationMeaning: "매일 생성할 PR 수의 포아송 평균입니다. 실제 일별 생성 수는 달라지며 KST 시간대별 가중치로 도착 시각을 정합니다.",
+      method: ["최초 r+ 활성화 기록을 날짜별로 집계", "관측한 평일 수로 나누어 일간 평균 계산", "시간대별 3,334건을 정규화해 도착 가중치 계산"],
+      limitations: ["현재 시간대 분포에는 주말과 휴일 차이를 반영하지 않습니다."], detailMarkdown: arrivalDetail,
     }),
     individualDefectProbability: draft({
       realityMeaning: "현재 main HEAD와 함께 CI 검증했을 때 독립적인 실패 원인을 만드는 PR의 발생 비율입니다.",

@@ -9,7 +9,7 @@ const contractScenario: ScenarioConfig = {
   prCount: 60,
   targetMergeCount: 40,
   repetitions: 2,
-  arrival: { kind: "fixed", value: 1 },
+  arrival: { ...DEFAULT_SCENARIO.arrival, meanPerDay: 1440, hourlyWeights: Array(24).fill(1) },
   individualDefectProbability: 0.15,
   interactionDefects: { ...DEFAULT_SCENARIO.interactionDefects, setsPerHundredPrs: 0 },
   ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { lower: 2, upper: 2, coverage: 0.95 }, successDuration: { lower: 2, upper: 2, coverage: 0.95 }, falseNegativeRate: 0, falsePositiveRate: 0 },

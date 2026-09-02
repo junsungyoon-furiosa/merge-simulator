@@ -28,7 +28,7 @@ const descriptions = {
   targetMergeCount: "머지된 PR 수가 이 값 이상이 되면 실행을 종료합니다. 배치 전체가 원자적으로 머지되므로 최종 머지 수가 조금 초과할 수 있습니다.",
   repetitions: "각 정책을 반복 실행할 횟수입니다. 반복 결과로 평균, 백분위수와 신뢰구간을 계산합니다.",
   seed: "PR 도착, 결함, CI와 LLM 결과를 재현하는 기준 문자열입니다. 같은 설정과 시드는 같은 결과를 만듭니다.",
-  arrival: "PR 사이 도착 간격의 평균입니다. 현재는 지수분포를 사용하므로 실제 간격은 매번 달라집니다.",
+  arrival: "하루에 생성되는 PR 수의 평균입니다. 실제 일별 생성 수는 포아송 분포로 달라지며, KST 시간대별 활성화 비중에 따라 도착 시각이 정해집니다.",
   individualDefect: "각 PR이 다른 PR과 무관한 개별 결함을 가질 확률입니다. 실제 결함 여부는 정책에 공개되지 않습니다.",
   interactions: "PR 100개당 생성할 상호작용 결함 집합 수의 평균입니다. 실제 개수는 포아송 분포로 추첨됩니다.",
   interactionSize: "하나의 상호작용 결함 집합에 포함될 수 있는 최대 PR 수입니다. 구성 PR이 모두 함께 있을 때 결함이 발생합니다.",
@@ -110,8 +110,8 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
 
         <div className="section-rule"><span>결함과 도착</span></div>
         <div className="field-grid">
-          <Field title="평균 도착 간격" description={descriptions.arrival} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.arrival.kind === "exponential" ? scenario.arrival.mean : 10} onChange={(event) => onScenario({ ...scenario, arrival: { kind: "exponential", mean: Number(event.target.value) } })} />}
+          <Field title="근무일당 평균 PR 생성 수" description={descriptions.arrival} unit="PR/일">
+            {(id) => <input id={id} type="number" min={0.1} step={0.1} value={scenario.arrival.meanPerDay} onChange={(event) => onScenario({ ...scenario, arrival: { ...scenario.arrival, meanPerDay: Number(event.target.value) } })} />}
           </Field>
           <Field title="개별 결함률" description={descriptions.individualDefect} unit="%">
             {(id) => <input id={id} type="number" min={0} max={100} step={0.1} value={scenario.individualDefectProbability * 100} onChange={(event) => onScenario({ ...scenario, individualDefectProbability: Number(event.target.value) / 100 })} />}

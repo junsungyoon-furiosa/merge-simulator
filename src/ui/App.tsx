@@ -98,7 +98,7 @@ export function App() {
           {result && <PolicyComparison result={result} onReplay={replay} />}
         </div>
       </main> : <Suspense fallback={<main className="evidence-page"><p>환경값 근거를 불러오는 중입니다.</p></main>}><EnvironmentEvidencePage scenario={scenario} onScenario={setScenario} /></Suspense>}
-      <footer><span>브라우저 안에서만 계산되고 저장됩니다.</span><span>schema v3 · deterministic seed</span></footer>
+      <footer><span>브라우저 안에서만 계산되고 저장됩니다.</span><span>schema v1 · deterministic seed</span></footer>
       {replayEvents && replayTotalPrs !== undefined && <RunReplay events={replayEvents} totalPrs={replayTotalPrs} loading={replayLoading} onClose={() => { setReplayEvents(undefined); setReplayTotalPrs(undefined); }} />}
     </div>
   );

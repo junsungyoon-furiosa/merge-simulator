@@ -21,7 +21,7 @@ const sourceLabels = { direct: "직접 입력", applied: "프로필 적용값", 
 const groups: ParameterGroup[] = ["PR", "CI", "LLM"];
 
 export default function EnvironmentEvidencePage({ scenario, onScenario, profile = ACTIVE_CALIBRATION_PROFILE }: Props) {
-  const [selectedId, setSelectedId] = useState<EnvironmentParameterId>("arrivalMean");
+  const [selectedId, setSelectedId] = useState<EnvironmentParameterId>("dailyPrCount");
   const [pendingIds, setPendingIds] = useState<EnvironmentParameterId[]>();
   const applicableIds = useMemo(() => applicableParameterIds(profile), [profile]);
   const selected = profile.parameters[selectedId];

@@ -128,7 +128,7 @@ Bors 운영 환경에서 관측하거나 추정한 값을 설명합니다.
 
 | 영역 | ID | UI 명칭 | 문서 상태 | 추정값 상태 | 초기 기능 |
 |---|---|---|---|---|---|
-| PR | `arrivalMean` | 평균 도착 간격 | `draft` | `none` | 상세만 제공 |
+| PR | `dailyPrCount` | 근무일당 평균 PR 생성 수 | `draft` | `none` | 상세만 제공 |
 | PR | `individualDefectProbability` | 개별 결함률 | `draft` | `none` | 상세만 제공 |
 | CI | `ciFailureDuration` | CI 실패 시간 중앙 확률 구간 | `draft` | `none` | 상세만 제공 |
 | CI | `ciSuccessDuration` | CI 성공 시간 중앙 확률 구간 | `draft` | `none` | 상세만 제공 |
@@ -146,7 +146,7 @@ Bors 운영 환경에서 관측하거나 추정한 값을 설명합니다.
 
 | ID | 현실에서의 의미 | 시뮬레이션에서의 의미 | 현재 확보한 산출근거 초안 |
 |---|---|---|---|
-| `arrivalMean` | PR이 Bors r+ 승인을 받아 머지 큐에 등록되는 사건 사이의 평균 시간 간격 | 지수분포로 다음 PR 도착 간격을 생성할 때 사용하는 평균 | Bors DB의 r+ 기록 테이블과 개별 PR 등록 시각을 이용한다. 정확한 테이블·필드와 집계 기준은 미정이다. |
+| `dailyPrCount` | 하루 동안 최초 r+ 승인을 받아 Bors 머지 큐에 들어온 PR 수의 평균 | 매일 생성할 PR 수의 포아송 평균이며 KST 시간대별 가중치로 도착 시각을 생성 | Bors DB의 최초 r+ 기록을 날짜별로 집계한다. 시간대 분포는 KST 활성화 3,334건을 사용한다. |
 | `individualDefectProbability` | 현재 main HEAD와 함께 CI 검증했을 때 독립적으로 실패 원인을 만드는 PR의 발생 비율 | 새 PR마다 다른 PR과 무관한 개별 결함을 부여할 확률 | Bors DB에서 PR의 최초 검증 실패 여부를 집계하는 방안을 검토한다. 재시도·인프라 실패 제외 기준은 미정이다. |
 | `ciFailureDuration` | Bors-flow가 실패 결과로 종료된 CI 실행의 소요시간 분포 | CI가 실패로 관측된 실행의 시간을 로그정규분포로 추첨하는 중앙 확률 구간 | Orchestrator의 bors-flow 실패 결과를 집계한다. 시작·종료 시각과 제외할 취소·무효 실행 기준은 미정이다. |
 | `ciSuccessDuration` | Bors-flow가 성공 결과로 종료된 CI 실행의 소요시간 분포 | CI가 성공으로 관측된 실행의 시간을 로그정규분포로 추첨하는 중앙 확률 구간 | Orchestrator의 bors-flow 성공 결과를 집계한다. 성공 실행의 안정적인 전체 파이프라인 시간을 사용한다. |
@@ -170,15 +170,15 @@ CI와 LLM 시간 구간의 포함 확률은 현재 코드 기본값인 95%를 �
 6. 상세 산출근거 및 분석
 7. 한계와 주의사항
 
-### 7.1 예시: 평균 도착 간격
+### 7.1 예시: 근무일당 평균 PR 생성 수
 
 #### 현실에서의 의미
 
-새로운 PR이 Bors r+ 승인을 받고 머지 큐에 들어오는 시간 사이의 간격이다.
+하루 동안 최초 r+ 승인을 받아 Bors 머지 큐에 들어온 PR 수의 평균이다.
 
 #### 시뮬레이션에서의 의미
 
-PR 도착 간격을 지수분포로 생성할 때 사용하는 평균값이다. 값이 작을수록 PR이 더 자주 도착한다.
+매일 생성할 PR 수의 포아송 평균이다. 실제 생성 수는 날마다 달라지고 KST 시간대별 가중치에 따라 도착 시각이 정해진다.
 
 #### 관측·추정값
 
@@ -187,9 +187,9 @@ PR 도착 간격을 지수분포로 생성할 때 사용하는 평균값이다. 
 #### 산출 방법
 
 - Bors DB의 대상 테이블에서 r+ 등록 시각 조회
-- PR별 연속된 등록 시각 사이의 차이 계산
+- 날짜별 최초 r+ PR 수 집계
 - 비정상 데이터와 대상 기간 필터링
-- 산술평균 또는 별도로 정한 대표값 계산
+- 관측 평일 수로 나누어 근무일당 평균 계산
 
 #### 데이터 기준
 
@@ -204,7 +204,7 @@ PR 도착 간격을 지수분포로 생성할 때 사용하는 평균값이다. 
 
 #### 한계와 주의사항
 
-야간과 주말을 포함할지에 따라 값이 달라질 수 있다.
+모든 날을 같은 평일로 취급하므로 주말과 휴일의 차이는 표현하지 않는다.
 
 미산출 상태이거나 적용값이 없으면 적용 버튼을 비활성화한다.
 
@@ -214,7 +214,7 @@ PR 도착 간격을 지수분포로 생성할 때 사용하는 평균값이다. 
 
 ### 8.1 PR과 결함
 
-1. 평균 도착 간격
+1. 근무일당 평균 PR 생성 수
 2. 개별 결함률
 
 ### 8.2 CI
@@ -337,7 +337,7 @@ CI 거짓 음성과 거짓 양성은 혼동하기 쉬우므로 상세 화면에 
 
 ```ts
 export type EnvironmentParameterId =
-  | "arrivalMean"
+  | "dailyPrCount"
   | "individualDefectProbability"
   | "ciFailureDuration"
   | "ciSuccessDuration"
@@ -348,7 +348,7 @@ export type EnvironmentParameterId =
   | "llmDuration";
 
 export interface EnvironmentParameterValueMap {
-  arrivalMean: number;
+  dailyPrCount: number;
   individualDefectProbability: number;
   ciFailureDuration: DurationInterval;
   ciSuccessDuration: DurationInterval;
@@ -393,7 +393,7 @@ interface EnvironmentParameterDefinition<K extends EnvironmentParameterId> {
 
 | ID | ScenarioConfig 경로 | 적용 단위 |
 |---|---|---|
-| `arrivalMean` | `arrival.mean` | 평균값만 변경하고 지수분포 종류를 유지한다. |
+| `dailyPrCount` | `arrival.meanPerDay` | 일간 평균만 변경하고 KST 시간대 가중치와 timezone은 유지한다. |
 | `individualDefectProbability` | `individualDefectProbability` | 확률 하나를 변경한다. |
 | `ciFailureDuration` | `ci.failureDuration` | `lower`, `upper`, `coverage` 전체를 변경한다. |
 | `ciSuccessDuration` | `ci.successDuration` | `lower`, `upper`, `coverage` 전체를 변경한다. |
@@ -403,7 +403,7 @@ interface EnvironmentParameterDefinition<K extends EnvironmentParameterId> {
 | `llmInnocentFalseAccusationRate` | `llm.innocentFalseAccusationRate` | 확률 하나를 변경한다. |
 | `llmDuration` | `llm.duration` | `lower`, `upper`, `coverage` 전체를 변경한다. |
 
-`arrivalMean`을 적용할 때 현재 `arrival`이 지수분포가 아니면 적용할 수 없는 설정으로 처리한다. 현재 UI와 기본 시나리오는 지수분포만 생성하지만 타입 경계를 명확히 유지한다.
+`dailyPrCount` 적용은 일간 평균만 변경하며 24개 시간대 가중치와 KST timezone은 유지한다.
 
 ### 12.3 추정값 상태와 근거 타입
 
@@ -518,7 +518,7 @@ interface ScenarioCalibration {
 
 ```ts
 interface ScenarioConfig {
-  schemaVersion: 3;
+  schemaVersion: 1;
   // 기존 필드 생략
   calibration?: ScenarioCalibration;
 }
@@ -566,19 +566,9 @@ interface ScenarioConfig {
 
 Replay는 실험 당시 저장된 숫자를 사용하므로 현재 프로필의 변경이나 제거에 영향을 받지 않는다. 출처 메타데이터 유무만 다른 동일한 시나리오는 엔진 이벤트와 지표가 같아야 한다.
 
-### 13.5 schema v3와 마이그레이션
+### 13.5 최초 공개 schema v1
 
-시나리오 저장 형식은 v3로 올린다.
-
-| 입력 버전 | 변환 규칙 |
-|---|---|
-| v1 | 기존 시간 `Distribution`을 중앙 확률 구간으로 변환한 뒤 v3로 올리고 `calibration`은 생략한다. |
-| v2 | 기존 환경 숫자를 그대로 복사하고 `schemaVersion: 3`으로 올리며 `calibration`은 생략한다. |
-| v3 | 유효성 검사 후 그대로 사용한다. |
-
-JSON 최상위 스키마도 v3로 내보내고 v1, v2, v3 가져오기를 허용한다. 저장된 실험 결과 내부의 `scenario`도 같은 정규화 함수를 거친다.
-
-IndexedDB에는 object store나 index 변경이 없으므로 데이터베이스 버전을 올리지 않는다. 레코드를 읽을 때 시나리오 정규화를 적용한다.
+개발 중 사용한 과거 시나리오 형식은 배포 전 폐기한다. JSON은 schema v1만 가져오고 내보내며, IndexedDB 내부 버전을 올려 기존 시나리오와 실험을 초기화한다. 이후 배포된 v1에서 호환이 필요한 변경이 생길 때부터 마이그레이션을 추가한다.
 
 Worker의 `PROTOCOL_VERSION`은 시나리오 저장 스키마와 별개의 앱 내부 메시지 계약이다. `calibration`은 엔진이 무시하는 메타데이터이므로 worker protocol v1을 유지한다.
 

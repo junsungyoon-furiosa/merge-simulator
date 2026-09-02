@@ -11,7 +11,7 @@ const profileWithValues: CalibrationProfile = {
   version: 2,
   parameters: {
     ...BORS_PRODUCTION_2026_Q2.parameters,
-    arrivalMean: { ...BORS_PRODUCTION_2026_Q2.parameters.arrivalMean, estimate: { status: "recommended", value: 12 } },
+    dailyPrCount: { ...BORS_PRODUCTION_2026_Q2.parameters.dailyPrCount, estimate: { status: "recommended", value: 12 } },
     ciFailureDuration: { ...BORS_PRODUCTION_2026_Q2.parameters.ciFailureDuration, estimate: { status: "provisional", value: { lower: 8, upper: 35, coverage: 0.95 } } },
   },
 };
@@ -29,18 +29,19 @@ describe("environment calibration", () => {
   });
 
   test("previews and applies only selected values with provenance", () => {
-    const preview = previewCalibration(DEFAULT_SCENARIO, profileWithValues, ["arrivalMean", "ciFailureDuration"]);
-    expect(preview.map(({ id }) => id)).toEqual(["arrivalMean", "ciFailureDuration"]);
-    const applied = applyCalibration(DEFAULT_SCENARIO, profileWithValues, ["arrivalMean"]);
-    expect(applied.arrival).toEqual({ kind: "exponential", mean: 12 });
+    const preview = previewCalibration(DEFAULT_SCENARIO, profileWithValues, ["dailyPrCount", "ciFailureDuration"]);
+    expect(preview.map(({ id }) => id)).toEqual(["dailyPrCount", "ciFailureDuration"]);
+    const applied = applyCalibration(DEFAULT_SCENARIO, profileWithValues, ["dailyPrCount"]);
+    expect(applied.arrival).toEqual({ ...DEFAULT_SCENARIO.arrival, meanPerDay: 12 });
     expect(applied.ci).toEqual(DEFAULT_SCENARIO.ci);
-    expect(applied.calibration?.parameters.arrivalMean).toEqual({ profileId: "fixture", profileVersion: 2, appliedValue: 12 });
-    expect(calibrationSourceState(applied, "arrivalMean")).toBe("applied");
-    expect(calibrationSourceState({ ...applied, arrival: { kind: "exponential", mean: 13 } }, "arrivalMean")).toBe("modified");
+    expect(applied.calibration?.parameters.dailyPrCount).toEqual({ profileId: "fixture", profileVersion: 2, appliedValue: 12 });
+    expect(calibrationSourceState(applied, "dailyPrCount")).toBe("applied");
+    expect(calibrationSourceState({ ...applied, arrival: { ...applied.arrival, meanPerDay: 13 } }, "dailyPrCount")).toBe("modified");
   });
 
-  test("does not apply arrival mean to a non-exponential distribution", () => {
-    const uniform = { ...DEFAULT_SCENARIO, arrival: { kind: "uniform" as const, min: 1, max: 2 } };
-    expect(applyCalibration(uniform, profileWithValues, ["arrivalMean"])).toEqual(uniform);
+  test("preserves the hourly arrival profile when applying daily volume", () => {
+    const applied = applyCalibration(DEFAULT_SCENARIO, profileWithValues, ["dailyPrCount"]);
+    expect(applied.arrival.hourlyWeights).toEqual(DEFAULT_SCENARIO.arrival.hourlyWeights);
+    expect(applied.arrival.timezone).toBe("Asia/Seoul");
   });
 });

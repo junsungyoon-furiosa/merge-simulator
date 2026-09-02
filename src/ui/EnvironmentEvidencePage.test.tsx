@@ -10,8 +10,8 @@ const profile: CalibrationProfile = {
   id: "ui-fixture",
   parameters: {
     ...BORS_PRODUCTION_2026_Q2.parameters,
-    arrivalMean: {
-      ...BORS_PRODUCTION_2026_Q2.parameters.arrivalMean,
+    dailyPrCount: {
+      ...BORS_PRODUCTION_2026_Q2.parameters.dailyPrCount,
       estimate: { status: "recommended", value: 12 },
     },
   },
@@ -25,8 +25,8 @@ test("shows evidence and applies a profiled value after preview", () => {
   expect(screen.getByText("1 / 9")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "이 값 적용" }));
   expect(screen.getByRole("dialog", { name: "관측·추정값을 적용할까요?" })).toBeInTheDocument();
-  expect(screen.getAllByText("10분")[0]).toBeInTheDocument();
-  expect(screen.getAllByText("12분")[0]).toBeInTheDocument();
+  expect(screen.getAllByText("144 PR/일")[0]).toBeInTheDocument();
+  expect(screen.getAllByText("12 PR/일")[0]).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "취소" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(onScenario).not.toHaveBeenCalled();
@@ -35,7 +35,7 @@ test("shows evidence and applies a profiled value after preview", () => {
   fireEvent.click(screen.getByRole("button", { name: "적용" }));
 
   expect(onScenario).toHaveBeenCalledWith(expect.objectContaining({
-    arrival: { kind: "exponential", mean: 12 },
-    calibration: { parameters: { arrivalMean: { profileId: "ui-fixture", profileVersion: 1, appliedValue: 12 } } },
+    arrival: { ...DEFAULT_SCENARIO.arrival, meanPerDay: 12 },
+    calibration: { parameters: { dailyPrCount: { profileId: "ui-fixture", profileVersion: 1, appliedValue: 12 } } },
   }));
 });

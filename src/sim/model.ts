@@ -14,8 +14,21 @@ export interface DurationInterval {
   coverage: number;
 }
 
+export const KST_HOURLY_ARRIVAL_WEIGHTS = [
+  60, 19, 4, 4, 0, 5, 7, 10,
+  31, 68, 167, 210, 164, 301, 268, 276,
+  310, 316, 256, 259, 244, 160, 102, 93,
+] as const;
+
+export interface DailyArrivalProfile {
+  kind: "dailyProfile";
+  meanPerDay: number;
+  timezone: "Asia/Seoul";
+  hourlyWeights: number[];
+}
+
 export type EnvironmentParameterId =
-  | "arrivalMean"
+  | "dailyPrCount"
   | "individualDefectProbability"
   | "ciFailureDuration"
   | "ciSuccessDuration"
@@ -26,7 +39,7 @@ export type EnvironmentParameterId =
   | "llmDuration";
 
 export interface EnvironmentParameterValueMap {
-  arrivalMean: number;
+  dailyPrCount: number;
   individualDefectProbability: number;
   ciFailureDuration: DurationInterval;
   ciSuccessDuration: DurationInterval;
@@ -65,13 +78,13 @@ export interface PolicyInstance {
 }
 
 export interface ScenarioConfig {
-  schemaVersion: 3;
+  schemaVersion: 1;
   name: string;
   seed: string;
   prCount: number;
   targetMergeCount: number;
   repetitions: number;
-  arrival: Distribution;
+  arrival: DailyArrivalProfile;
   individualDefectProbability: number;
   interactionDefects: {
     setsPerHundredPrs: number;
@@ -95,13 +108,18 @@ export interface ScenarioConfig {
 }
 
 export const DEFAULT_SCENARIO: ScenarioConfig = {
-  schemaVersion: 3,
+  schemaVersion: 1,
   name: "기본 비교 실험",
   seed: "demo-1",
   prCount: 500,
   targetMergeCount: 400,
   repetitions: 30,
-  arrival: { kind: "exponential", mean: 10 },
+  arrival: {
+    kind: "dailyProfile",
+    meanPerDay: 144,
+    timezone: "Asia/Seoul",
+    hourlyWeights: [...KST_HOURLY_ARRIVAL_WEIGHTS],
+  },
   individualDefectProbability: 0.01,
   interactionDefects: { setsPerHundredPrs: 1, maxSize: 4, sizeWeights: { 2: 0.7, 3: 0.2, 4: 0.1 } },
   ci: {

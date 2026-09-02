@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { DEFAULT_SCENARIO } from "../sim/model";
+import { DEFAULT_SCENARIO, KST_HOURLY_ARRIVAL_WEIGHTS } from "../sim/model";
 import { durationDistribution, inverseStandardNormalCdf, Random } from "../sim/random";
-import { generateWorld } from "../sim/world";
+import { generateDailyArrivalTimes, generateWorld } from "../sim/world";
 
 describe("deterministic random world", () => {
   test("same seed creates the same values", () => {
@@ -23,6 +23,28 @@ describe("deterministic random world", () => {
 
   test("equal interval bounds produce a fixed duration", () => {
     expect(durationDistribution({ lower: 7, upper: 7, coverage: 0.95 })).toEqual({ kind: "fixed", value: 7 });
+  });
+
+  test("uses the supplied KST hourly profile for a variable daily count", () => {
+    expect(KST_HOURLY_ARRIVAL_WEIGHTS).toHaveLength(24);
+    expect(KST_HOURLY_ARRIVAL_WEIGHTS.reduce<number>((sum, value) => sum + value, 0)).toBe(3334);
+    const arrivals = generateDailyArrivalTimes(DEFAULT_SCENARIO.arrival, 33_340, new Random("arrival-profile"));
+    expect(arrivals[0]).toBeGreaterThan(0);
+    expect(arrivals.every((time, index) => index === 0 || time >= arrivals[index - 1])).toBe(true);
+    const hourlyCounts = Array(24).fill(0) as number[];
+    arrivals.forEach((time) => { hourlyCounts[Math.floor(time / 60) % 24] += 1; });
+    expect(hourlyCounts[4]).toBe(0);
+    const observedPeakShare = hourlyCounts[17] / arrivals.length;
+    expect(observedPeakShare).toBeCloseTo(316 / 3334, 2);
+    const elapsedDays = Math.ceil(arrivals.at(-1)! / 1440);
+    expect(arrivals.length / elapsedDays).toBeCloseTo(DEFAULT_SCENARIO.arrival.meanPerDay, -1);
+  });
+
+  test("arrival volume does not change which PRs receive individual defects", () => {
+    const slow = generateWorld({ ...DEFAULT_SCENARIO, prCount: 100, arrival: { ...DEFAULT_SCENARIO.arrival, meanPerDay: 10 } }, 3);
+    const fast = generateWorld({ ...DEFAULT_SCENARIO, prCount: 100, arrival: { ...DEFAULT_SCENARIO.arrival, meanPerDay: 1000 } }, 3);
+    expect(slow.prs.map((pr) => pr.individualDefect)).toEqual(fast.prs.map((pr) => pr.individualDefect));
+    expect(slow.prs.map((pr) => pr.arrivalTime)).not.toEqual(fast.prs.map((pr) => pr.arrivalTime));
   });
 
   test("world respects bounds and is reproducible", () => {

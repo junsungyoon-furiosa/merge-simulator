@@ -40,13 +40,13 @@ test("renders the simulator's primary action and registered default policies", (
 
 test("opens the environment evidence catalog without changing the scenario", async () => {
   render(<App />);
-  fireEvent.change(screen.getByLabelText("평균 도착 간격"), { target: { value: "17" } });
+  fireEvent.change(screen.getByLabelText("근무일당 평균 PR 생성 수"), { target: { value: "17" } });
   const navigation = screen.getByRole("navigation", { name: "작업 화면" });
   fireEvent.click(within(navigation).getByRole("button", { name: "환경값 근거" }));
   expect(await screen.findByRole("heading", { name: "환경값 근거" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "적용 가능한 관측·추정값 없음" })).toBeDisabled();
   fireEvent.click(within(navigation).getByRole("button", { name: "시뮬레이션" }));
-  expect(screen.getByLabelText("평균 도착 간격")).toHaveValue(17);
+  expect(screen.getByLabelText("근무일당 평균 PR 생성 수")).toHaveValue(17);
 });
 
 test("provides help tooltips for every scenario field", () => {
@@ -92,6 +92,7 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
 
   fireEvent.change(screen.getByLabelText("실험 이름"), { target: { value: "임의 설정" } });
   fireEvent.change(screen.getByLabelText("전체 PR"), { target: { value: "700" } });
+  fireEvent.change(screen.getByLabelText("근무일당 평균 PR 생성 수"), { target: { value: "60" } });
   fireEvent.change(screen.getByLabelText("CI 실패 시간 95% 하한"), { target: { value: "5" } });
   fireEvent.change(screen.getByLabelText("LLM 적중률"), { target: { value: "25" } });
   fireEvent.change(screen.getByLabelText("CI 1회 비용"), { target: { value: "9" } });
@@ -103,6 +104,7 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
 
   expect(screen.getByLabelText("실험 이름")).toHaveValue(DEFAULT_SCENARIO.name);
   expect(screen.getByLabelText("전체 PR")).toHaveValue(DEFAULT_SCENARIO.prCount);
+  expect(screen.getByLabelText("근무일당 평균 PR 생성 수")).toHaveValue(144);
   expect(screen.getByLabelText("CI 실패 시간 95% 하한")).toHaveValue(10);
   expect(screen.getByLabelText("LLM 적중률")).toHaveValue(70);
   expect(screen.getByLabelText("CI 1회 비용")).toHaveValue(null);

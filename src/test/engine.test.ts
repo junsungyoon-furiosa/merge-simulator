@@ -7,7 +7,7 @@ const scenario = (changes: Partial<ScenarioConfig> = {}): ScenarioConfig => ({
   prCount: 100,
   targetMergeCount: 80,
   repetitions: 10,
-  arrival: { kind: "fixed", value: 1 },
+  arrival: { ...DEFAULT_SCENARIO.arrival, meanPerDay: 1440, hourlyWeights: Array(24).fill(1) },
   ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { lower: 2, upper: 2, coverage: 0.95 }, successDuration: { lower: 2, upper: 2, coverage: 0.95 }, falseNegativeRate: 0, falsePositiveRate: 0 },
   interactionDefects: { ...DEFAULT_SCENARIO.interactionDefects, setsPerHundredPrs: 0 },
   ...changes,
@@ -24,7 +24,7 @@ describe("simulation engine", () => {
 
   test("calibration metadata does not change events or metrics", () => {
     const config = scenario();
-    const calibrated = { ...config, calibration: { parameters: { arrivalMean: { profileId: "test", profileVersion: 1, appliedValue: 1 } } } };
+    const calibrated = { ...config, calibration: { parameters: { dailyPrCount: { profileId: "test", profileVersion: 1, appliedValue: 1 } } } };
     const policy = instance({ kind: "batchSplit", batchSize: 8, maxWait: 3, splitRatio: 0.5 });
     expect(runSimulation(calibrated, policy, 0)).toEqual(runSimulation(config, policy, 0));
   });

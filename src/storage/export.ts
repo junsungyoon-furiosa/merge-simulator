@@ -1,31 +1,26 @@
 import type { ExperimentResult, PolicyInstance, RunResult, ScenarioConfig } from "../sim/model";
 import { policyLabel } from "../sim/policyRegistry";
 import { importSchema, normalizePolicyInstances, normalizeScenarioConfig, policyInstanceSchema } from "./schema";
-import { policyConfigSchema } from "../sim/policyRegistry";
 
 export function toJson(scenario: ScenarioConfig, policies: PolicyInstance[], result?: ExperimentResult, replay?: RunResult): string {
-  return JSON.stringify({ schemaVersion: 3, scenario, policies, result, replay }, null, 2);
+  return JSON.stringify({ schemaVersion: 1, scenario, policies, result, replay }, null, 2);
 }
 
-function normalizeResultPolicy(value: unknown, fallback: PolicyInstance | undefined, index: number): PolicyInstance {
-  const current = policyInstanceSchema.safeParse(value);
-  if (current.success) return current.data;
-  const legacy = policyConfigSchema.safeParse(value);
-  if (legacy.success) return { id: fallback?.id ?? `legacy-result-policy-${index + 1}-${legacy.data.kind}`, config: legacy.data };
-  if (fallback) return fallback;
-  throw new Error("실험 결과에 유효한 정책이 없습니다.");
+function normalizeResultPolicy(value: unknown): PolicyInstance {
+  return policyInstanceSchema.parse(value);
 }
 
-export function normalizeExperimentResult(value: unknown, fallbackPolicies: PolicyInstance[]): ExperimentResult | undefined {
+export function normalizeExperimentResult(value: unknown): ExperimentResult | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object") throw new Error("실험 결과 형식이 올바르지 않습니다.");
   const raw = value as Record<string, unknown>;
-  const resultPolicies = raw.policies === undefined ? fallbackPolicies : normalizePolicyInstances(raw.policies);
+  if (raw.policies === undefined) throw new Error("실험 결과에 정책 목록이 없습니다.");
+  const resultPolicies = normalizePolicyInstances(raw.policies);
   if (!Array.isArray(raw.results)) throw new Error("실험 정책 결과 형식이 올바르지 않습니다.");
-  const results = raw.results.map((candidate, index) => {
+  const results = raw.results.map((candidate) => {
     if (!candidate || typeof candidate !== "object") throw new Error("정책 결과 형식이 올바르지 않습니다.");
     const item = candidate as Record<string, unknown>;
-    const policy = normalizeResultPolicy(item.policy, resultPolicies[index] ?? fallbackPolicies[index], index);
+    const policy = normalizeResultPolicy(item.policy);
     const runs = Array.isArray(item.runs)
       ? item.runs.map((run) => run && typeof run === "object" ? { ...run, policy } : run)
       : item.runs;
@@ -37,7 +32,7 @@ export function normalizeExperimentResult(value: unknown, fallbackPolicies: Poli
 export function fromJson(value: string): { scenario: ScenarioConfig; policies: PolicyInstance[]; result?: ExperimentResult } {
   const imported = importSchema.parse(JSON.parse(value));
   const policies = normalizePolicyInstances(imported.policies);
-  return { scenario: normalizeScenarioConfig(imported.scenario), policies, result: normalizeExperimentResult(imported.result, policies) };
+  return { scenario: normalizeScenarioConfig(imported.scenario), policies, result: normalizeExperimentResult(imported.result) };
 }
 
 function csvCell(value: unknown): string {

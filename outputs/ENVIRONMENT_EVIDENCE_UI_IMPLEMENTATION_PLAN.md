@@ -3,7 +3,7 @@
 - 상태: 구현 완료
 - 작성일: 2026-09-01
 - 선행 설계: `outputs/ENVIRONMENT_EVIDENCE_UI_DESIGN.md`
-- 대상 스키마: ScenarioConfig schema v3
+- 대상 스키마: ScenarioConfig schema v1
 
 ## 1. 목표
 
@@ -22,7 +22,7 @@
 - 개별 적용, 전체 적용과 변경 미리보기
 - 파라미터별 출처와 적용 당시 값 저장
 - 적용 후 수동 수정 상태 판별
-- ScenarioConfig schema v3와 v1·v2 마이그레이션
+- 최초 공개 ScenarioConfig schema v1과 일간 도착 프로필
 - JSON, IndexedDB, 실험 스냅샷과 Replay 출처 보존
 - 데스크톱·모바일 UI와 접근성
 - 단위·컴포넌트·E2E 테스트와 명세 갱신
@@ -44,7 +44,7 @@
 4. 적용값이 없는 항목은 문서만 표시하고 적용 대상에서 제외한다.
 5. 프로필 적용은 실험 설계값과 정책 설정을 변경하지 않는다.
 6. 출처 메타데이터는 엔진 난수, 이벤트와 지표에 영향을 주지 않는다.
-7. 과거 v1·v2 파일과 IndexedDB 레코드를 계속 읽을 수 있어야 한다.
+7. 개발 중 생성된 이전 저장 형식은 폐기하고 최초 공개 schema v1만 허용한다.
 8. Markdown raw HTML은 렌더링하지 않는다.
 
 ## 4. Markdown 처리 결정
@@ -122,7 +122,7 @@ src/
 - 프로필은 아홉 개 항목을 모두 포함한다.
 - duration에는 `DurationInterval`만 허용한다.
 
-### 작업 2. ScenarioConfig schema v3 모델
+### 작업 2. ScenarioConfig schema v1 모델
 
 `src/sim/model.ts`에 `EnvironmentParameterId`, `EnvironmentParameterValueMap`과 저장용 snapshot 타입을 함께 둔다. 프로필 전용 타입은 이 공유 타입을 import한다.
 
@@ -142,9 +142,9 @@ interface ScenarioCalibration {
 
 구현 항목:
 
-- `ScenarioConfig.schemaVersion`을 3으로 변경
+- `ScenarioConfig.schemaVersion`을 1로 확정
 - `calibration?: ScenarioCalibration` 추가
-- `DEFAULT_SCENARIO`은 v3, calibration 없음
+- `DEFAULT_SCENARIO`은 일간 KST 도착 프로필을 포함한 v1이며 calibration은 없음
 - 엔진 파일에는 calibration import나 분기 추가 금지
 
 순환 의존성을 피하기 위해 파라미터 ID·값 매핑과 저장 snapshot 타입은 sim 모델에 두고, 프로필·문서 전용 타입은 calibration 모듈에 둔다. sim과 engine은 calibration 모듈을 import하지 않는다.
@@ -154,36 +154,16 @@ interface ScenarioCalibration {
 - calibration 유무가 `runSimulation` 결과에 영향을 주지 않는다.
 - 기본값 초기화가 자연스럽게 calibration을 제거한다.
 
-### 작업 3. Zod 스키마와 마이그레이션
+### 작업 3. Zod 스키마와 저장 초기화
 
-`src/storage/schema.ts`:
-
-1. 현재 v2 스키마를 `scenarioV2Schema`로 보존한다.
-2. 파라미터별 calibration source 스키마를 정의한다.
-3. duration은 기존 interval 스키마, 확률은 0~1, 도착 평균은 양수로 검증한다.
-4. 현재 `scenarioSchema`는 v3만 허용한다.
-5. `normalizeScenarioConfig`는 v3 → v2 → v1 순서로 판별한다.
-6. v2는 숫자를 유지하고 v3로 올리며 calibration을 생략한다.
-7. v1은 기존 duration 변환 후 바로 v3로 올린다.
-8. 최상위 import는 버전 1, 2, 3을 허용한다.
-9. 빈 calibration parameters는 저장하지 않는다.
-
-`src/storage/export.ts`:
-
-- 최상위 export 버전을 3으로 변경
-- import scenario와 실험 결과 내부 scenario에 같은 정규화 적용
-
-`src/storage/database.ts`:
-
-- object store와 index가 같으므로 IndexedDB 버전은 1 유지
-- 읽는 시점의 정규화 유지
+`src/storage/schema.ts`는 최초 공개 schema v1만 검증한다. `arrival`은 양수인 `meanPerDay`, `Asia/Seoul`, 정확히 24개의 0 이상 가중치와 양수인 가중치 합을 요구한다. 개발 중 사용한 v1~v3 변환기와 config-only 정책 호환은 제거한다. JSON은 v1만 가져오고 내보내며 IndexedDB 내부 버전을 올려 기존 시나리오와 실험을 비운다.
 
 완료 조건:
 
-- v1, v2, v3을 모두 가져올 수 있다.
-- v3 round trip에서 파라미터별 출처와 appliedValue가 보존된다.
-- 잘못된 ID·값 타입·범위는 거부된다.
-- 기존 실험 결과의 Replay scenario도 v3로 정규화된다.
+- 현재 v1 JSON과 실험 스냅샷이 round trip 된다.
+- 구형 schema와 도착 분포는 거부된다.
+- 시간대 가중치와 파라미터별 출처가 보존된다.
+- 잘못된 가중치 길이, 합계, 값 타입과 범위는 거부된다.
 
 ### 작업 4. 파라미터 중앙 레지스트리
 
@@ -200,7 +180,7 @@ interface ScenarioCalibration {
 
 - 숫자 필드는 대상 숫자 하나만 변경
 - duration은 lower, upper, coverage 전체 변경
-- `arrivalMean`은 지수분포일 때만 적용
+- `dailyPrCount`는 `arrival.meanPerDay`만 변경하고 KST 시간대 가중치는 유지
 - 확률은 %, 시간은 분으로 표시
 - duration 비교는 세 필드 전부 비교
 
@@ -288,7 +268,7 @@ interface EnvironmentEvidencePageProps {
 - Markdown 근거
 - 개별·전체 적용 버튼
 
-초기 선택은 `arrivalMean`이다. 목록 항목은 실제 button으로 만들고 선택 상태를 접근성 속성으로 전달한다.
+초기 선택은 `dailyPrCount`이다. 목록 항목은 실제 button으로 만들고 선택 상태를 접근성 속성으로 전달한다.
 
 `App.tsx`에서 `React.lazy`와 `Suspense`로 환경값 화면을 불러온다. 모바일은 목록과 상세를 세로로 배치한다.
 
@@ -332,7 +312,7 @@ type AppView = "simulation" | "environmentEvidence";
 - 전환 중 scenario, policies, result 유지
 - 적용 완료 후 시뮬레이션 복귀와 메시지
 - 실행 중 근거 탐색 허용, 값 적용 비활성
-- footer schema v3 표시
+- footer schema v1 표시
 
 `ScenarioEditor` 안내 문구는 다음 의미로 변경한다.
 
@@ -370,23 +350,19 @@ type AppView = "simulation" | "environmentEvidence";
 - 수동 수정 상태
 - 재적용과 다른 프로필 출처 교체
 - 비대상 scenario 필드 보존
-- 비지수 arrival 적용 거부
+- 일간 평균 적용 시 시간대 가중치와 timezone 보존
 
 테스트용 fixture에만 provisional·recommended 값을 둔다.
 
-### 저장·마이그레이션 테스트
+### 저장 테스트
 
 `src/test/storage.test.ts`:
 
-- v1 → v3
-- v2 → v3
-- v3 round trip
-- 출처와 appliedValue 보존
-- 실험 결과 내부 scenario 정규화
-- 잘못된 키와 타입 거부
-- 빈 calibration 처리
-
-기존 v1 duration 테스트의 기대 버전은 2에서 3으로 바꾼다.
+- schema v1 round trip
+- 24개 시간대 가중치와 출처 보존
+- 구형 schema·도착 분포·config-only 정책 거부
+- 잘못된 키, 가중치 길이와 타입 거부
+- 실험 결과 내부 scenario 보존
 
 ### 엔진 불변성 테스트
 
@@ -436,7 +412,7 @@ production에 가짜 값을 넣지 않기 위해 적용 성공은 fixture 기반
 - 정책·실험 설계값 적용 제외
 - 파라미터별 출처와 적용 당시 값 보존
 - 출처 메타데이터의 엔진 비관측성
-- v1·v2 저장 데이터 호환
+- 최초 공개 schema v1과 구형 개발 데이터 폐기
 
 구현 후 이 문서에는 실제 파일과 검증 결과를 기록하는 `구현 결과` 절을 추가한다.
 
@@ -458,7 +434,7 @@ build 출력에서 환경값 화면과 Markdown 렌더러가 별도 lazy chunk�
 
 | 시점 | 검증 |
 |---|---|
-| schema v3 완료 | typecheck, storage test |
+| schema v1 완료 | typecheck, storage test |
 | 레지스트리·적용 완료 | calibration test, engine 불변성 test |
 | 프로필·Markdown 완료 | typecheck, registry test |
 | 화면·dialog 완료 | component test, lint |
@@ -495,6 +471,15 @@ appliedValue를 저장하고 `적용됨`과 `적용 후 수정됨`을 구분한�
 
 raw HTML 플러그인을 사용하지 않고 `skipHtml`을 적용한다. 첫 버전은 저장소의 검토된 정적 Markdown만 포함한다.
 
+## 11.1 일간 도착 모델 개정
+
+- 사용자는 근무일당 평균 PR 생성 수를 입력한다.
+- 엔진은 제공된 KST 24시간 Count 3,334건을 가중치로 사용한다.
+- 모든 날을 같은 평일로 취급하며 주말과 휴일은 모델링하지 않는다.
+- 시간대별 생성 수는 포아송 분포, 시간 안의 정확한 시각은 균등분포로 생성한다.
+- 도착 난수와 결함 난수를 분리해 일간 도착량 변경이 결함 PR 배정을 바꾸지 않게 한다.
+- 기본 144 PR/일은 과거 데모 강도를 환산한 값이며 현실 관측값이 아니다.
+
 ## 12. 완료 조건
 
 1. 아홉 개 파라미터의 목록과 상세 근거를 확인할 수 있다.
@@ -504,7 +489,7 @@ raw HTML 플러그인을 사용하지 않고 `skipHtml`을 적용한다. 첫 버
 5. 값과 파라미터별 출처가 함께 저장된다.
 6. 적용 후 수동 수정 상태가 구분된다.
 7. 기본값 초기화가 calibration을 제거한다.
-8. v1·v2·v3 JSON과 저장 실험을 불러올 수 있다.
+8. schema v1 JSON과 저장 실험을 불러오며 구형 개발 데이터는 거부한다.
 9. Replay는 실험 당시 scenario를 사용한다.
 10. calibration이 엔진 결과에 영향을 주지 않는다.
 11. 기존 정책 관리·실행·Replay E2E가 통과한다.
@@ -515,7 +500,7 @@ raw HTML 플러그인을 사용하지 않고 `skipHtml`을 적용한다. 첫 버
 
 ```text
 타입
-  → schema v3와 마이그레이션
+  → schema v1과 저장 초기화
   → 파라미터 레지스트리
   → 순수 적용 로직
   → 초기 프로필과 Markdown
