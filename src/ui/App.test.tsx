@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { DEFAULT_SCENARIO, type ExperimentResult, type PolicyInstance } from "../sim/model";
 import { DEFAULT_POLICIES } from "../sim/policyRegistry";
@@ -38,15 +38,11 @@ test("renders the simulator's primary action and registered default policies", (
   expect(screen.getByRole("option", { name: "Bors 기준" })).toBeInTheDocument();
 });
 
-test("opens the environment evidence catalog without changing the scenario", async () => {
+test("does not expose environment evidence navigation from the simulator", () => {
   render(<App />);
-  fireEvent.change(screen.getByLabelText("근무일당 평균 PR 생성 수"), { target: { value: "17" } });
-  const navigation = screen.getByRole("navigation", { name: "작업 화면" });
-  fireEvent.click(within(navigation).getByRole("button", { name: "환경값 근거" }));
-  expect(await screen.findByRole("heading", { name: "환경값 근거" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "적용 가능한 관측·추정값 없음" })).toBeDisabled();
-  fireEvent.click(within(navigation).getByRole("button", { name: "시뮬레이션" }));
-  expect(screen.getByLabelText("근무일당 평균 PR 생성 수")).toHaveValue(17);
+  expect(screen.queryByRole("navigation", { name: "작업 화면" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "환경값 근거" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "환경값 의미와 산출근거 보기" })).not.toBeInTheDocument();
 });
 
 test("provides help tooltips for every scenario field", () => {

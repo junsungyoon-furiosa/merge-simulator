@@ -4,13 +4,8 @@ test("manages, runs, and replays policy instances", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /머지 시뮬레이터/ })).toBeVisible();
 
-  const viewNavigation = page.getByRole("navigation", { name: "작업 화면" });
-  await viewNavigation.getByRole("button", { name: "환경값 근거" }).click();
-  await expect(page.getByRole("heading", { name: "환경값 근거" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "적용 가능한 관측·추정값 없음" })).toBeDisabled();
-  await page.getByRole("button", { name: "CI 거짓 음성률" }).click();
-  await expect(page.getByText("실제로 결함이 있는 후보 master를 CI가 성공으로 판정")).toBeVisible();
-  await viewNavigation.getByRole("button", { name: "시뮬레이션" }).click();
+  await expect(page.getByRole("navigation", { name: "작업 화면" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "환경값 의미와 산출근거 보기" })).toHaveCount(0);
 
   await page.getByLabel("전체 PR").fill("321");
   await page.getByLabel("근무일당 평균 PR 생성 수").fill("60");
