@@ -2,11 +2,18 @@ import { z } from "zod";
 import type { PolicyInstance, ScenarioConfig } from "../sim/model";
 import { policyConfigSchema } from "../sim/policyRegistry";
 
+const empiricalDurationSchema = z.object({
+  kind: z.literal("empirical"),
+  observations: z.array(z.tuple([z.number().positive(), z.number().int().positive()])).min(1),
+}).strict();
+
 export const durationIntervalSchema = z.object({
   lower: z.number().positive(),
   upper: z.number().positive(),
   coverage: z.number().gt(0).lt(1),
 }).strict().refine((value) => value.upper >= value.lower, "상한은 하한 이상이어야 합니다.");
+
+export const durationModelSchema = z.union([durationIntervalSchema, empiricalDurationSchema]);
 
 const probabilitySchema = z.number().min(0).max(1);
 const calibrationSourceSchema = <T extends z.ZodTypeAny>(valueSchema: T) => z.object({
@@ -18,8 +25,9 @@ const calibrationSourceSchema = <T extends z.ZodTypeAny>(valueSchema: T) => z.ob
 const calibrationParametersSchema = z.object({
   dailyPrCount: calibrationSourceSchema(z.number().min(0.1)).optional(),
   individualDefectProbability: calibrationSourceSchema(probabilitySchema).optional(),
-  ciFailureDuration: calibrationSourceSchema(durationIntervalSchema).optional(),
-  ciSuccessDuration: calibrationSourceSchema(durationIntervalSchema).optional(),
+  interactionSetsPerHundredPrs: calibrationSourceSchema(z.number().min(0).max(100)).optional(),
+  ciFailureDuration: calibrationSourceSchema(durationModelSchema).optional(),
+  ciSuccessDuration: calibrationSourceSchema(durationModelSchema).optional(),
   ciFalseNegativeRate: calibrationSourceSchema(probabilitySchema).optional(),
   ciFalsePositiveRate: calibrationSourceSchema(probabilitySchema).optional(),
   llmCulpritHitRate: calibrationSourceSchema(probabilitySchema).optional(),
@@ -51,8 +59,8 @@ export const scenarioSchema = z.object({
     sizeWeights: z.record(z.string(), z.number().nonnegative()),
   }).strict(),
   ci: z.object({
-    failureDuration: durationIntervalSchema,
-    successDuration: durationIntervalSchema,
+    failureDuration: durationModelSchema,
+    successDuration: durationModelSchema,
     falseNegativeRate: probabilitySchema,
     falsePositiveRate: probabilitySchema,
     costPerRun: z.number().nonnegative().optional(),

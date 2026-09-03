@@ -1,4 +1,4 @@
-import type { Distribution, DurationInterval } from "./model";
+import type { Distribution, DurationInterval, DurationModel, EmpiricalDurationDistribution } from "./model";
 
 // Rational approximation of the standard normal quantile.
 export function inverseStandardNormalCdf(probability: number): number {
@@ -33,6 +33,37 @@ export function durationDistribution(interval: DurationInterval): Distribution {
     median: Math.sqrt(interval.lower * interval.upper),
     sigma: Math.log(interval.upper / interval.lower) / (2 * boundaryZ),
   };
+}
+
+export function isEmpiricalDuration(value: DurationModel): value is EmpiricalDurationDistribution {
+  return "kind" in value && value.kind === "empirical";
+}
+
+export function empiricalDurationQuantile(distribution: EmpiricalDurationDistribution, probability: number): number {
+  if (!(probability >= 0 && probability <= 1)) throw new RangeError("Probability must be between 0 and 1");
+  const observations = [...distribution.observations].sort((left, right) => left[0] - right[0]);
+  const total = observations.reduce((sum, [, count]) => sum + count, 0);
+  if (total <= 0) throw new RangeError("Empirical duration distribution must not be empty");
+  const valueAt = (index: number) => {
+    let cursor = index;
+    for (const [minutes, count] of observations) {
+      if (cursor < count) return minutes;
+      cursor -= count;
+    }
+    return observations.at(-1)![0];
+  };
+  const position = (total - 1) * probability;
+  const lowerIndex = Math.floor(position);
+  const fraction = position - lowerIndex;
+  const lower = valueAt(lowerIndex);
+  const upper = valueAt(Math.min(lowerIndex + 1, total - 1));
+  return Number((lower + (upper - lower) * fraction).toFixed(10));
+}
+
+export function durationCentralInterval(model: DurationModel, coverage = 0.95): DurationInterval {
+  if (!isEmpiricalDuration(model)) return model;
+  const tail = (1 - coverage) / 2;
+  return { lower: empiricalDurationQuantile(model, tail), upper: empiricalDurationQuantile(model, 1 - tail), coverage };
 }
 
 function xmur3(value: string): () => number {
@@ -101,8 +132,16 @@ export class Random {
     return Math.exp(Math.log(distribution.median) + distribution.sigma * this.normal());
   }
 
-  sampleDuration(interval: DurationInterval): number {
-    return this.sample(durationDistribution(interval));
+  sampleDuration(model: DurationModel): number {
+    if (!isEmpiricalDuration(model)) return this.sample(durationDistribution(model));
+    const total = model.observations.reduce((sum, [, count]) => sum + count, 0);
+    if (total <= 0) throw new RangeError("Empirical duration distribution must not be empty");
+    let cursor = this.next() * total;
+    for (const [minutes, count] of model.observations) {
+      cursor -= count;
+      if (cursor < 0) return minutes;
+    }
+    return model.observations.at(-1)![0];
   }
 }
 

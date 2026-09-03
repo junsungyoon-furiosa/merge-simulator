@@ -1,4 +1,5 @@
-import type { EnvironmentParameterId, EnvironmentParameterValueMap, ScenarioConfig } from "../sim/model";
+import type { DurationModel, EnvironmentParameterId, EnvironmentParameterValueMap, ScenarioConfig } from "../sim/model";
+import { durationCentralInterval, isEmpiricalDuration } from "../sim/random";
 
 export type ParameterGroup = "PR" | "CI" | "LLM";
 
@@ -14,11 +15,22 @@ export interface ParameterDefinition<K extends EnvironmentParameterId = Environm
 }
 
 const numberEquals = (left: number, right: number) => Object.is(left, right);
-const durationEquals = (left: EnvironmentParameterValueMap["ciFailureDuration"], right: EnvironmentParameterValueMap["ciFailureDuration"]) =>
-  left.lower === right.lower && left.upper === right.upper && left.coverage === right.coverage;
+const durationEquals = (left: DurationModel, right: DurationModel) => {
+  if (isEmpiricalDuration(left) || isEmpiricalDuration(right)) {
+    return isEmpiricalDuration(left) && isEmpiricalDuration(right)
+      && left.observations.length === right.observations.length
+      && left.observations.every(([minutes, count], index) => minutes === right.observations[index]?.[0] && count === right.observations[index]?.[1]);
+  }
+  return left.lower === right.lower && left.upper === right.upper && left.coverage === right.coverage;
+};
 const percent = (value: number) => `${Number((value * 100).toFixed(4))}%`;
-const duration = (value: EnvironmentParameterValueMap["ciFailureDuration"]) =>
-  `${Number((value.coverage * 100).toFixed(4))}% 중앙 구간 ${value.lower}–${value.upper}분`;
+const duration = (value: DurationModel) => {
+  const interval = durationCentralInterval(value);
+  const sampleText = isEmpiricalDuration(value)
+    ? "경험적 분포 " + value.observations.reduce((sum, [, count]) => sum + count, 0) + "건 · "
+    : "";
+  return sampleText + Number((interval.coverage * 100).toFixed(4)) + "% 중앙 구간 " + interval.lower + "–" + interval.upper + "분";
+};
 
 const defineParameter = <K extends EnvironmentParameterId>(definition: ParameterDefinition<K>) => definition;
 
@@ -34,6 +46,12 @@ export const PARAMETER_REGISTRY = [
     read: (scenario) => scenario.individualDefectProbability,
     write: (scenario, value) => ({ ...scenario, individualDefectProbability: value }),
     format: percent, equals: numberEquals,
+  }),
+  defineParameter({
+    id: "interactionSetsPerHundredPrs", group: "PR", label: "상호작용 / 100 PR", unit: "세트",
+    read: (scenario) => scenario.interactionDefects.setsPerHundredPrs,
+    write: (scenario, value) => ({ ...scenario, interactionDefects: { ...scenario.interactionDefects, setsPerHundredPrs: value } }),
+    format: (value) => String(value) + "세트 / 100 PR", equals: numberEquals,
   }),
   defineParameter({
     id: "ciFailureDuration", group: "CI", label: "CI 실패 시간 중앙 확률 구간", unit: "분",

@@ -61,7 +61,7 @@ const batchSplitDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "batc
   }),
   fields: [
     { type: "number", key: "batchSize", label: "배치 크기", min: 2, max: 100, step: 1 },
-    { type: "number", key: "maxWait", label: "최대 대기", min: 0, step: 1 },
+    { type: "number", key: "maxWait", label: "최대 대기(분)", min: 0, step: 1 },
     { type: "number", key: "splitRatio", label: "분할 비율", min: 0.01, max: 0.99, step: 0.05 },
   ],
   create: createBatchSplitPolicy,
@@ -81,7 +81,7 @@ const borsDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "bors" }>> 
   }),
   fields: [
     { type: "number", key: "maxBatchSize", label: "최대 배치 크기", min: 2, max: 100, step: 1 },
-    { type: "number", key: "batchDelay", label: "배치 지연", min: 0, step: 1 },
+    { type: "number", key: "batchDelay", label: "배치 지연(분)", min: 0, step: 1 },
     {
       type: "select",
       key: "splitBatchScheduling",
@@ -108,7 +108,7 @@ const llmAssistedDefinition: PolicyDefinition<Extract<PolicyConfig, { kind: "llm
   }),
   fields: [
     { type: "number", key: "batchSize", label: "배치 크기", min: 2, max: 100, step: 1 },
-    { type: "number", key: "maxWait", label: "최대 대기", min: 0, step: 1 },
+    { type: "number", key: "maxWait", label: "최대 대기(분)", min: 0, step: 1 },
   ],
   create: createLlmAssistedPolicy,
   formatLabel: (config) => `LLM 보조 (배치 ${config.batchSize} · 대기 ${config.maxWait})`,

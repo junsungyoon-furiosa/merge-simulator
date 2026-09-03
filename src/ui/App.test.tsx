@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { DEFAULT_SCENARIO, type ExperimentResult, type PolicyInstance } from "../sim/model";
+import { durationCentralInterval } from "../sim/random";
 import { DEFAULT_POLICIES } from "../sim/policyRegistry";
 import { App } from "./App";
 
@@ -23,6 +24,8 @@ vi.mock("../storage/database", () => storage);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  simulation.runExperiment.mockReset();
+  simulation.replay.mockReset();
   storage.loadScenario.mockResolvedValue(undefined);
   storage.saveScenario.mockResolvedValue(undefined);
   storage.saveExperiment.mockResolvedValue(undefined);
@@ -75,7 +78,7 @@ test("adds and configures the registered bors policy", () => {
 
   expect(screen.getByText("Bors 기준", { selector: ".policy-instance-heading strong" })).toBeInTheDocument();
   expect(screen.getByLabelText("4번 Bors 기준 최대 배치 크기")).toHaveValue(8);
-  expect(screen.getByLabelText("4번 Bors 기준 배치 지연")).toHaveValue(30);
+  expect(screen.getByLabelText("4번 Bors 기준 배치 지연(분)")).toHaveValue(30);
   expect(screen.getByLabelText("4번 Bors 기준 분할 배치 순서")).toHaveValue("fifo");
 
   fireEvent.change(screen.getByLabelText("4번 Bors 기준 분할 배치 순서"), { target: { value: "beforeFresh" } });
@@ -88,8 +91,11 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
 
   fireEvent.change(screen.getByLabelText("실험 이름"), { target: { value: "임의 설정" } });
   fireEvent.change(screen.getByLabelText("전체 PR"), { target: { value: "700" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "근무일당 평균 PR 생성 수 기본값 사용" }));
   fireEvent.change(screen.getByLabelText("근무일당 평균 PR 생성 수"), { target: { value: "60" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "CI 실패 시간 기본 분포 사용" }));
   fireEvent.change(screen.getByLabelText("CI 실패 시간 95% 하한"), { target: { value: "5" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "LLM 적중률 기본값 사용" }));
   fireEvent.change(screen.getByLabelText("LLM 적중률"), { target: { value: "25" } });
   fireEvent.change(screen.getByLabelText("CI 1회 비용"), { target: { value: "9" } });
   fireEvent.change(screen.getByLabelText("2번 배치 분할 배치 크기"), { target: { value: "16" } });
@@ -100,9 +106,11 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
 
   expect(screen.getByLabelText("실험 이름")).toHaveValue(DEFAULT_SCENARIO.name);
   expect(screen.getByLabelText("전체 PR")).toHaveValue(DEFAULT_SCENARIO.prCount);
-  expect(screen.getByLabelText("근무일당 평균 PR 생성 수")).toHaveValue(144);
-  expect(screen.getByLabelText("CI 실패 시간 95% 하한")).toHaveValue(10);
-  expect(screen.getByLabelText("LLM 적중률")).toHaveValue(70);
+  expect(screen.getByLabelText("근무일당 평균 PR 생성 수")).toHaveValue(13);
+  expect(screen.getByLabelText("CI 실패 시간 95% 하한")).toHaveValue(durationCentralInterval(DEFAULT_SCENARIO.ci.failureDuration).lower);
+  expect(screen.getByLabelText("LLM 적중률")).toHaveValue(95);
+  expect(screen.getByRole("checkbox", { name: "근무일당 평균 PR 생성 수 기본값 사용" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "CI 실패 시간 기본 분포 사용" })).toBeChecked();
   expect(screen.getByLabelText("CI 1회 비용")).toHaveValue(null);
   expect(screen.getByLabelText("2번 배치 분할 배치 크기")).toHaveValue(8);
   expect(screen.getByLabelText("3번 LLM 보조 배치 크기")).toHaveValue(8);

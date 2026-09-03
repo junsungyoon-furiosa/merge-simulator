@@ -1,6 +1,10 @@
 import { useId, useState, type ReactNode } from "react";
-import type { PolicyConfig, PolicyInstance, PolicyKind, ScenarioConfig } from "../sim/model";
+import { applyCalibration, calibrationSourceState, clearCalibration } from "../calibration/applyCalibration";
+import { ACTIVE_CALIBRATION_PROFILE } from "../calibration/evidence/registry";
+import type { EnvironmentParameterId, PolicyConfig, PolicyInstance, PolicyKind, ScenarioConfig } from "../sim/model";
 import { createPolicyInstance, getPolicyDefinition, POLICY_DEFINITIONS } from "../sim/policyRegistry";
+import { durationCentralInterval, isEmpiricalDuration } from "../sim/random";
+import { getParameterDefinition as getEnvironmentParameterDefinition } from "../calibration/parameterRegistry";
 import "./policy-expansion.css";
 import "./reset-defaults.css";
 
@@ -18,6 +22,7 @@ interface FieldProps {
   description: string;
   unit?: string;
   wide?: boolean;
+  defaultControl?: { checked: boolean; label: string; ariaLabel: string; onChange: (checked: boolean) => void };
   children: (inputId: string) => ReactNode;
 }
 
@@ -31,8 +36,8 @@ const descriptions = {
   individualDefect: "각 PR이 다른 PR과 무관한 개별 결함을 가질 확률입니다. 실제 결함 여부는 정책에 공개되지 않습니다.",
   interactions: "PR 100개당 생성할 상호작용 결함 집합 수의 평균입니다. 실제 개수는 포아송 분포로 추첨됩니다.",
   interactionSize: "하나의 상호작용 결함 집합에 포함될 수 있는 최대 PR 수입니다. 구성 PR이 모두 함께 있을 때 결함이 발생합니다.",
-  ciFailureDuration: "CI가 실패로 판정한 실행의 소요시간 구간입니다. 표시된 확률만큼의 실행시간이 하한과 상한 사이에 나오며, 나머지는 양쪽 범위 밖에서 나올 수 있습니다.",
-  ciSuccessDuration: "CI가 성공으로 판정한 실행의 소요시간 구간입니다. 성공 실행은 실패 실행과 별도의 분포에서 시간을 추첨합니다.",
+  ciFailureDuration: "기본 분포는 관측된 실패 CI 시간에서 직접 추출합니다. 체크를 해제하면 표시된 95% 구간으로 로그정규분포를 구성합니다.",
+  ciSuccessDuration: "기본 분포는 관측된 성공 CI 시간에서 직접 추출합니다. 체크를 해제하면 표시된 95% 구간으로 로그정규분포를 구성합니다.",
   falseNegative: "실제로 비정상인 후보 master를 CI가 성공으로 잘못 판정할 확률입니다. 이 경우 결함 배치도 즉시 머지됩니다.",
   falsePositive: "실제로 정상인 후보 master를 CI가 실패로 잘못 판정할 확률입니다. 단독 CI라면 정상 PR도 격리될 수 있습니다.",
   llmHit: "실패 배치의 실제 범인 PR 각각을 LLM이 지목할 확률입니다. 지목만으로는 격리되지 않으며 단독 CI 실패가 필요합니다.",
@@ -44,8 +49,9 @@ const descriptions = {
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const coveragePercent = (coverage: number) => Number((coverage * 100).toFixed(4));
+const percentageInput = (value: number) => Number((value * 100).toFixed(6));
 
-function Field({ title, description, unit, wide = false, children }: FieldProps) {
+function Field({ title, description, unit, wide = false, defaultControl, children }: FieldProps) {
   const inputId = useId();
   const tooltipId = `${inputId}-help`;
 
@@ -62,6 +68,7 @@ function Field({ title, description, unit, wide = false, children }: FieldProps)
         {children(inputId)}
         {unit && <span className="field-unit">{unit}</span>}
       </div>
+      {defaultControl && <label className="parameter-default-toggle"><input type="checkbox" aria-label={defaultControl.ariaLabel} checked={defaultControl.checked} onChange={(event) => defaultControl.onChange(event.target.checked)} /><span>{defaultControl.label}</span></label>}
     </div>
   );
 }
@@ -77,13 +84,39 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
   const duplicatePolicy = (policy: PolicyInstance) => {
     onPolicies([...policies, { id: crypto.randomUUID(), config: structuredClone(policy.config) }]);
   };
+  const usesDefault = (id: EnvironmentParameterId) => {
+    const source = scenario.calibration?.parameters[id];
+    return source?.profileId === ACTIVE_CALIBRATION_PROFILE.id
+      && source.profileVersion === ACTIVE_CALIBRATION_PROFILE.version
+      && calibrationSourceState(scenario, id) === "applied";
+  };
+  const setDefault = (id: EnvironmentParameterId, checked: boolean) => {
+    if (checked) {
+      onScenario(applyCalibration(scenario, ACTIVE_CALIBRATION_PROFILE, [id]));
+      return;
+    }
+    if (id === "ciFailureDuration" && isEmpiricalDuration(scenario.ci.failureDuration)) {
+      onScenario(clearCalibration({ ...scenario, ci: { ...scenario.ci, failureDuration: durationCentralInterval(scenario.ci.failureDuration) } }, id));
+      return;
+    }
+    if (id === "ciSuccessDuration" && isEmpiricalDuration(scenario.ci.successDuration)) {
+      onScenario(clearCalibration({ ...scenario, ci: { ...scenario.ci, successDuration: durationCentralInterval(scenario.ci.successDuration) } }, id));
+      return;
+    }
+    onScenario(clearCalibration(scenario, id));
+  };
+  const failureDuration = durationCentralInterval(scenario.ci.failureDuration);
+  const successDuration = durationCentralInterval(scenario.ci.successDuration);
+  const failureDurationDefault = usesDefault("ciFailureDuration");
+  const successDurationDefault = usesDefault("ciSuccessDuration");
+  const defaultControl = (id: EnvironmentParameterId) => ({ checked: usesDefault(id), label: "기본값 사용", ariaLabel: getEnvironmentParameterDefinition(id).label + " 기본값 사용", onChange: (checked: boolean) => setDefault(id, checked) });
 
   return (
     <aside className="control-panel" aria-label="실험 조건">
       <div className="panel-heading">
         <span className="eyebrow">SCENARIO</span>
         <h2>실험 조건</h2>
-        <p>값은 현실 추정치가 아닌 비교용 가정입니다.</p>
+        <p>집계 기본값을 사용하거나 비교용 가정값을 직접 입력할 수 있습니다.</p>
       </div>
 
       <fieldset disabled={disabled}>
@@ -108,43 +141,45 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
 
         <div className="section-rule"><span>결함과 도착</span></div>
         <div className="field-grid">
-          <Field title="근무일당 평균 PR 생성 수" description={descriptions.arrival} unit="PR/일">
-            {(id) => <input id={id} type="number" min={0.1} step={0.1} value={scenario.arrival.meanPerDay} onChange={(event) => onScenario({ ...scenario, arrival: { ...scenario.arrival, meanPerDay: Number(event.target.value) } })} />}
+          <Field title="근무일당 평균 PR 생성 수" description={descriptions.arrival} unit="PR/일" defaultControl={defaultControl("dailyPrCount")}>
+            {(id) => <input id={id} disabled={usesDefault("dailyPrCount")} type="number" min={0.1} step={0.1} value={scenario.arrival.meanPerDay} onChange={(event) => onScenario({ ...scenario, arrival: { ...scenario.arrival, meanPerDay: Number(event.target.value) } })} />}
           </Field>
-          <Field title="개별 결함률" description={descriptions.individualDefect} unit="%">
-            {(id) => <input id={id} type="number" min={0} max={100} step={0.1} value={scenario.individualDefectProbability * 100} onChange={(event) => onScenario({ ...scenario, individualDefectProbability: Number(event.target.value) / 100 })} />}
+          <Field title="개별 결함률" description={descriptions.individualDefect} unit="%" defaultControl={defaultControl("individualDefectProbability")}>
+            {(id) => <input id={id} disabled={usesDefault("individualDefectProbability")} type="number" min={0} max={100} step={0.1} value={percentageInput(scenario.individualDefectProbability)} onChange={(event) => onScenario({ ...scenario, individualDefectProbability: Number(event.target.value) / 100 })} />}
           </Field>
         </div>
 
         <div className="section-rule"><span>CI 테스트</span></div>
         <div className="field-grid">
-          <Field title={"CI 실패 시간 " + coveragePercent(scenario.ci.failureDuration.coverage) + "% 하한"} description={descriptions.ciFailureDuration} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.failureDuration.lower} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, failureDuration: { ...scenario.ci.failureDuration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), scenario.ci.failureDuration.upper) } } })} />}
+          <label className="duration-default-toggle"><input type="checkbox" checked={failureDurationDefault} onChange={(event) => setDefault("ciFailureDuration", event.target.checked)} /><span>CI 실패 시간 기본 분포 사용</span></label>
+          <Field title={"CI 실패 시간 " + coveragePercent(failureDuration.coverage) + "% 하한"} description={descriptions.ciFailureDuration} unit="분">
+            {(id) => <input id={id} disabled={failureDurationDefault} type="number" min={0.1} value={failureDuration.lower} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, failureDuration: { ...failureDuration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), failureDuration.upper) } } })} />}
           </Field>
-          <Field title={"CI 실패 시간 " + coveragePercent(scenario.ci.failureDuration.coverage) + "% 상한"} description={descriptions.ciFailureDuration} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.failureDuration.upper} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, failureDuration: { ...scenario.ci.failureDuration, lower: Math.min(scenario.ci.failureDuration.lower, Number(event.target.value)), upper: Number(event.target.value) } } })} />}
+          <Field title={"CI 실패 시간 " + coveragePercent(failureDuration.coverage) + "% 상한"} description={descriptions.ciFailureDuration} unit="분">
+            {(id) => <input id={id} disabled={failureDurationDefault} type="number" min={0.1} value={failureDuration.upper} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, failureDuration: { ...failureDuration, lower: Math.min(failureDuration.lower, Number(event.target.value)), upper: Number(event.target.value) } } })} />}
           </Field>
-          <Field title={"CI 성공 시간 " + coveragePercent(scenario.ci.successDuration.coverage) + "% 하한"} description={descriptions.ciSuccessDuration} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.successDuration.lower} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, successDuration: { ...scenario.ci.successDuration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), scenario.ci.successDuration.upper) } } })} />}
+          <label className="duration-default-toggle"><input type="checkbox" checked={successDurationDefault} onChange={(event) => setDefault("ciSuccessDuration", event.target.checked)} /><span>CI 성공 시간 기본 분포 사용</span></label>
+          <Field title={"CI 성공 시간 " + coveragePercent(successDuration.coverage) + "% 하한"} description={descriptions.ciSuccessDuration} unit="분">
+            {(id) => <input id={id} disabled={successDurationDefault} type="number" min={0.1} value={successDuration.lower} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, successDuration: { ...successDuration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), successDuration.upper) } } })} />}
           </Field>
-          <Field title={"CI 성공 시간 " + coveragePercent(scenario.ci.successDuration.coverage) + "% 상한"} description={descriptions.ciSuccessDuration} unit="분">
-            {(id) => <input id={id} type="number" min={0.1} value={scenario.ci.successDuration.upper} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, successDuration: { ...scenario.ci.successDuration, lower: Math.min(scenario.ci.successDuration.lower, Number(event.target.value)), upper: Number(event.target.value) } } })} />}
+          <Field title={"CI 성공 시간 " + coveragePercent(successDuration.coverage) + "% 상한"} description={descriptions.ciSuccessDuration} unit="분">
+            {(id) => <input id={id} disabled={successDurationDefault} type="number" min={0.1} value={successDuration.upper} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, successDuration: { ...successDuration, lower: Math.min(successDuration.lower, Number(event.target.value)), upper: Number(event.target.value) } } })} />}
           </Field>
-          <Field title="거짓 음성률" description={descriptions.falseNegative} unit="%">
-            {(id) => <input id={id} type="number" min={0} max={100} step={0.1} value={scenario.ci.falseNegativeRate * 100} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, falseNegativeRate: Number(event.target.value) / 100 } })} />}
+          <Field title="거짓 음성률" description={descriptions.falseNegative} unit="%" defaultControl={defaultControl("ciFalseNegativeRate")}>
+            {(id) => <input id={id} disabled={usesDefault("ciFalseNegativeRate")} type="number" min={0} max={100} step={0.1} value={percentageInput(scenario.ci.falseNegativeRate)} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, falseNegativeRate: Number(event.target.value) / 100 } })} />}
           </Field>
-          <Field title="거짓 양성률" description={descriptions.falsePositive} unit="%">
-            {(id) => <input id={id} type="number" min={0} max={100} step={0.1} value={scenario.ci.falsePositiveRate * 100} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, falsePositiveRate: Number(event.target.value) / 100 } })} />}
+          <Field title="거짓 양성률" description={descriptions.falsePositive} unit="%" defaultControl={defaultControl("ciFalsePositiveRate")}>
+            {(id) => <input id={id} disabled={usesDefault("ciFalsePositiveRate")} type="number" min={0} max={100} step={0.1} value={percentageInput(scenario.ci.falsePositiveRate)} onChange={(event) => onScenario({ ...scenario, ci: { ...scenario.ci, falsePositiveRate: Number(event.target.value) / 100 } })} />}
           </Field>
         </div>
 
         <div className="section-rule"><span>LLM 탐정</span></div>
         <div className="field-grid">
-          <Field title="LLM 적중률" description={descriptions.llmHit} unit="%">
-            {(id) => <input id={id} type="number" min={0} max={100} value={scenario.llm.culpritHitRate * 100} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, culpritHitRate: Number(event.target.value) / 100 } })} />}
+          <Field title="LLM 적중률" description={descriptions.llmHit} unit="%" defaultControl={defaultControl("llmCulpritHitRate")}>
+            {(id) => <input id={id} disabled={usesDefault("llmCulpritHitRate")} type="number" min={0} max={100} value={percentageInput(scenario.llm.culpritHitRate)} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, culpritHitRate: Number(event.target.value) / 100 } })} />}
           </Field>
-          <Field title="LLM 오지목률" description={descriptions.llmFalseAccusation} unit="%">
-            {(id) => <input id={id} type="number" min={0} max={100} value={scenario.llm.innocentFalseAccusationRate * 100} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, innocentFalseAccusationRate: Number(event.target.value) / 100 } })} />}
+          <Field title="LLM 오지목률" description={descriptions.llmFalseAccusation} unit="%" defaultControl={defaultControl("llmInnocentFalseAccusationRate")}>
+            {(id) => <input id={id} disabled={usesDefault("llmInnocentFalseAccusationRate")} type="number" min={0} max={100} value={percentageInput(scenario.llm.innocentFalseAccusationRate)} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, innocentFalseAccusationRate: Number(event.target.value) / 100 } })} />}
           </Field>
           <Field title={"LLM 시간 " + coveragePercent(scenario.llm.duration.coverage) + "% 하한"} description={descriptions.llmDuration} unit="분">
             {(id) => <input id={id} type="number" min={0.1} value={scenario.llm.duration.lower} onChange={(event) => onScenario({ ...scenario, llm: { ...scenario.llm, duration: { ...scenario.llm.duration, lower: Number(event.target.value), upper: Math.max(Number(event.target.value), scenario.llm.duration.upper) } } })} />}
@@ -156,8 +191,8 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
 
         <div className="section-rule"><span>고급</span></div>
         <div className="field-grid">
-          <Field title="상호작용 / 100 PR" description={descriptions.interactions}>
-            {(id) => <input id={id} type="number" min={0} step={0.1} value={scenario.interactionDefects.setsPerHundredPrs} onChange={(event) => onScenario({ ...scenario, interactionDefects: { ...scenario.interactionDefects, setsPerHundredPrs: Number(event.target.value) } })} />}
+          <Field title="상호작용 / 100 PR" description={descriptions.interactions} defaultControl={defaultControl("interactionSetsPerHundredPrs")}>
+            {(id) => <input id={id} disabled={usesDefault("interactionSetsPerHundredPrs")} type="number" min={0} step={0.1} value={scenario.interactionDefects.setsPerHundredPrs} onChange={(event) => onScenario({ ...scenario, interactionDefects: { ...scenario.interactionDefects, setsPerHundredPrs: Number(event.target.value) } })} />}
           </Field>
           <Field title="상호작용 최대 크기" description={descriptions.interactionSize}>
             {(id) => <input id={id} type="number" min={2} max={10} value={scenario.interactionDefects.maxSize} onChange={(event) => onScenario({ ...scenario, interactionDefects: { ...scenario.interactionDefects, maxSize: Number(event.target.value) } })} />}

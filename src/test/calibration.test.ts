@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applicableParameterIds, applyCalibration, calibrationSourceState, previewCalibration } from "../calibration/applyCalibration";
+import { applicableParameterIds, applyCalibration, calibrationSourceState, clearCalibration, previewCalibration } from "../calibration/applyCalibration";
 import type { CalibrationProfile } from "../calibration/model";
 import { PARAMETER_REGISTRY } from "../calibration/parameterRegistry";
 import { BORS_PRODUCTION_2026_Q2 } from "../calibration/profiles/borsProduction2026Q2";
@@ -17,15 +17,15 @@ const profileWithValues: CalibrationProfile = {
 };
 
 describe("environment calibration", () => {
-  test("registers exactly nine stable parameters in PR, CI, LLM order", () => {
-    expect(PARAMETER_REGISTRY).toHaveLength(9);
-    expect(new Set(PARAMETER_REGISTRY.map(({ id }) => id)).size).toBe(9);
-    expect(PARAMETER_REGISTRY.map(({ group }) => group)).toEqual(["PR", "PR", "CI", "CI", "CI", "CI", "LLM", "LLM", "LLM"]);
+  test("registers exactly ten stable parameters in PR, CI, LLM order", () => {
+    expect(PARAMETER_REGISTRY).toHaveLength(10);
+    expect(new Set(PARAMETER_REGISTRY.map(({ id }) => id)).size).toBe(10);
+    expect(PARAMETER_REGISTRY.map(({ group }) => group)).toEqual(["PR", "PR", "PR", "CI", "CI", "CI", "CI", "LLM", "LLM", "LLM"]);
   });
 
-  test("the initial Bors profile documents all values but applies none", () => {
-    expect(Object.keys(BORS_PRODUCTION_2026_Q2.parameters)).toHaveLength(9);
-    expect(applicableParameterIds(BORS_PRODUCTION_2026_Q2)).toEqual([]);
+  test("the Bors profile provides all collected defaults except LLM duration", () => {
+    expect(Object.keys(BORS_PRODUCTION_2026_Q2.parameters)).toHaveLength(10);
+    expect(applicableParameterIds(BORS_PRODUCTION_2026_Q2)).toEqual(PARAMETER_REGISTRY.map(({ id }) => id).filter((id) => id !== "llmDuration"));
   });
 
   test("previews and applies only selected values with provenance", () => {
@@ -37,6 +37,7 @@ describe("environment calibration", () => {
     expect(applied.calibration?.parameters.dailyPrCount).toEqual({ profileId: "fixture", profileVersion: 2, appliedValue: 12 });
     expect(calibrationSourceState(applied, "dailyPrCount")).toBe("applied");
     expect(calibrationSourceState({ ...applied, arrival: { ...applied.arrival, meanPerDay: 13 } }, "dailyPrCount")).toBe("modified");
+    expect(clearCalibration(applied, "dailyPrCount").calibration?.parameters.dailyPrCount).toBeUndefined();
   });
 
   test("preserves the hourly arrival profile when applying daily volume", () => {

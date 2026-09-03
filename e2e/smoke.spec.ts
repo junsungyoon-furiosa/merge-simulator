@@ -8,7 +8,8 @@ test("manages, runs, and replays policy instances", async ({ page }) => {
   await expect(page.getByRole("button", { name: "환경값 의미와 산출근거 보기" })).toHaveCount(0);
 
   await page.getByLabel("전체 PR").fill("321");
-  await page.getByLabel("근무일당 평균 PR 생성 수").fill("60");
+  await page.getByRole("checkbox", { name: "근무일당 평균 PR 생성 수 기본값 사용" }).uncheck();
+  await page.getByRole("spinbutton", { name: "근무일당 평균 PR 생성 수", exact: true }).fill("60");
   await page.getByLabel("2번 배치 분할 배치 크기").fill("16");
   await page.getByLabel("추가할 정책").selectOption("batchSplit");
   await page.getByRole("button", { name: "정책 추가" }).click();
@@ -21,7 +22,7 @@ test("manages, runs, and replays policy instances", async ({ page }) => {
   await page.getByRole("button", { name: "기본값으로 초기화" }).click();
   await expect(page.locator(".policy-instance")).toHaveCount(3);
   await expect(page.getByLabel("전체 PR")).toHaveValue("500");
-  await expect(page.getByLabel("근무일당 평균 PR 생성 수")).toHaveValue("144");
+  await expect(page.getByRole("spinbutton", { name: "근무일당 평균 PR 생성 수", exact: true })).toHaveValue("13");
   await expect(page.getByLabel("2번 배치 분할 배치 크기")).toHaveValue("8");
 
   await page.getByLabel("추가할 정책").selectOption("bors");

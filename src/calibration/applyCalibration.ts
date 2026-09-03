@@ -49,6 +49,17 @@ export function applyCalibration(scenario: ScenarioConfig, profile: CalibrationP
   return Object.keys(parameters).length > 0 ? { ...next, calibration: { parameters } } : next;
 }
 
+export function clearCalibration(scenario: ScenarioConfig, id: EnvironmentParameterId): ScenarioConfig {
+  if (!scenario.calibration?.parameters[id]) return scenario;
+  const parameters = { ...scenario.calibration.parameters };
+  delete parameters[id];
+  if (Object.keys(parameters).length === 0) {
+    const { calibration: _calibration, ...withoutCalibration } = scenario;
+    return withoutCalibration;
+  }
+  return { ...scenario, calibration: { parameters } };
+}
+
 export function calibrationSourceState(scenario: ScenarioConfig, id: EnvironmentParameterId): CalibrationSourceState {
   const source = scenario.calibration?.parameters[id];
   if (!source) return "direct";

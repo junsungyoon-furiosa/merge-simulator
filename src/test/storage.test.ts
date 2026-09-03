@@ -40,6 +40,12 @@ test("validates all 24 hourly weights", () => {
   expect(scenarioSchema.safeParse({ ...DEFAULT_SCENARIO, arrival: { ...DEFAULT_SCENARIO.arrival, hourlyWeights: Array(24).fill(0) } }).success).toBe(false);
 });
 
+test("validates empirical CI duration observations", () => {
+  expect(scenarioSchema.safeParse({ ...DEFAULT_SCENARIO, ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { kind: "empirical", observations: [] } } }).success).toBe(false);
+  expect(scenarioSchema.safeParse({ ...DEFAULT_SCENARIO, ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { kind: "empirical", observations: [[10, 0]] } } }).success).toBe(false);
+  expect(scenarioSchema.safeParse({ ...DEFAULT_SCENARIO, ci: { ...DEFAULT_SCENARIO.ci, failureDuration: { lower: 10, upper: 40, coverage: 0.95 } } }).success).toBe(true);
+});
+
 test("rejects unknown calibration parameter ids", () => {
   const scenario = { ...DEFAULT_SCENARIO, calibration: { parameters: { unknownParameter: { profileId: "x", profileVersion: 1, appliedValue: 1 } } } };
   expect(() => fromJson(JSON.stringify({ schemaVersion: 1, scenario, policies: DEFAULT_POLICIES }))).toThrow();

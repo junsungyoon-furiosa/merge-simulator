@@ -1,3 +1,5 @@
+import { REALITY_DEFAULT_PROFILE_ID, REALITY_DEFAULT_PROFILE_VERSION, REALITY_DEFAULTS } from "./realityDefaults";
+
 export type PrId = string;
 export type BatchId = string;
 export type SimTime = number;
@@ -13,6 +15,13 @@ export interface DurationInterval {
   upper: number;
   coverage: number;
 }
+
+export interface EmpiricalDurationDistribution {
+  kind: "empirical";
+  observations: Array<[minutes: number, count: number]>;
+}
+
+export type DurationModel = DurationInterval | EmpiricalDurationDistribution;
 
 export const KST_HOURLY_ARRIVAL_WEIGHTS = [
   60, 19, 4, 4, 0, 5, 7, 10,
@@ -30,6 +39,7 @@ export interface DailyArrivalProfile {
 export type EnvironmentParameterId =
   | "dailyPrCount"
   | "individualDefectProbability"
+  | "interactionSetsPerHundredPrs"
   | "ciFailureDuration"
   | "ciSuccessDuration"
   | "ciFalseNegativeRate"
@@ -41,8 +51,9 @@ export type EnvironmentParameterId =
 export interface EnvironmentParameterValueMap {
   dailyPrCount: number;
   individualDefectProbability: number;
-  ciFailureDuration: DurationInterval;
-  ciSuccessDuration: DurationInterval;
+  interactionSetsPerHundredPrs: number;
+  ciFailureDuration: DurationModel;
+  ciSuccessDuration: DurationModel;
   ciFalseNegativeRate: number;
   ciFalsePositiveRate: number;
   llmCulpritHitRate: number;
@@ -92,8 +103,8 @@ export interface ScenarioConfig {
     sizeWeights: Record<number, number>;
   };
   ci: {
-    failureDuration: DurationInterval;
-    successDuration: DurationInterval;
+    failureDuration: DurationModel;
+    successDuration: DurationModel;
     falseNegativeRate: number;
     falsePositiveRate: number;
     costPerRun?: number;
@@ -116,22 +127,35 @@ export const DEFAULT_SCENARIO: ScenarioConfig = {
   repetitions: 30,
   arrival: {
     kind: "dailyProfile",
-    meanPerDay: 144,
+    meanPerDay: REALITY_DEFAULTS.dailyPrCount,
     timezone: "Asia/Seoul",
     hourlyWeights: [...KST_HOURLY_ARRIVAL_WEIGHTS],
   },
-  individualDefectProbability: 0.01,
-  interactionDefects: { setsPerHundredPrs: 1, maxSize: 4, sizeWeights: { 2: 0.7, 3: 0.2, 4: 0.1 } },
+  individualDefectProbability: REALITY_DEFAULTS.individualDefectProbability,
+  interactionDefects: { setsPerHundredPrs: REALITY_DEFAULTS.interactionSetsPerHundredPrs, maxSize: 4, sizeWeights: { 2: 0.7, 3: 0.2, 4: 0.1 } },
   ci: {
-    failureDuration: { lower: 10, upper: 40, coverage: DEFAULT_DURATION_COVERAGE },
-    successDuration: { lower: 50, upper: 70, coverage: DEFAULT_DURATION_COVERAGE },
-    falseNegativeRate: 0.01,
-    falsePositiveRate: 0.01,
+    failureDuration: REALITY_DEFAULTS.ciFailureDuration,
+    successDuration: REALITY_DEFAULTS.ciSuccessDuration,
+    falseNegativeRate: REALITY_DEFAULTS.ciFalseNegativeRate,
+    falsePositiveRate: REALITY_DEFAULTS.ciFalsePositiveRate,
   },
   llm: {
     duration: { lower: 1, upper: 3, coverage: DEFAULT_DURATION_COVERAGE },
-    culpritHitRate: 0.7,
-    innocentFalseAccusationRate: 0.1,
+    culpritHitRate: REALITY_DEFAULTS.llmCulpritHitRate,
+    innocentFalseAccusationRate: REALITY_DEFAULTS.llmInnocentFalseAccusationRate,
+  },
+  calibration: {
+    parameters: {
+      dailyPrCount: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.dailyPrCount },
+      individualDefectProbability: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.individualDefectProbability },
+      interactionSetsPerHundredPrs: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.interactionSetsPerHundredPrs },
+      ciFailureDuration: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.ciFailureDuration },
+      ciSuccessDuration: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.ciSuccessDuration },
+      ciFalseNegativeRate: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.ciFalseNegativeRate },
+      ciFalsePositiveRate: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.ciFalsePositiveRate },
+      llmCulpritHitRate: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.llmCulpritHitRate },
+      llmInnocentFalseAccusationRate: { profileId: REALITY_DEFAULT_PROFILE_ID, profileVersion: REALITY_DEFAULT_PROFILE_VERSION, appliedValue: REALITY_DEFAULTS.llmInnocentFalseAccusationRate },
+    },
   },
 };
 

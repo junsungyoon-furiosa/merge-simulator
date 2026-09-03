@@ -19,19 +19,19 @@ const profile: CalibrationProfile = {
 
 test("shows evidence and applies a profiled value after preview", () => {
   const onScenario = vi.fn();
-  render(<EnvironmentEvidencePage scenario={DEFAULT_SCENARIO} onScenario={onScenario} profile={profile} />);
+  render(<EnvironmentEvidencePage scenario={{ ...DEFAULT_SCENARIO, calibration: undefined }} onScenario={onScenario} profile={profile} />);
 
   expect(screen.getByRole("heading", { name: "환경값 근거" })).toBeInTheDocument();
-  expect(screen.getByText("1 / 9")).toBeInTheDocument();
+  expect(screen.getByText("9 / 10")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "이 값 적용" }));
   expect(screen.getByRole("dialog", { name: "관측·추정값을 적용할까요?" })).toBeInTheDocument();
-  expect(screen.getAllByText("144 PR/일")[0]).toBeInTheDocument();
+  expect(screen.getAllByText("13 PR/일")[0]).toBeInTheDocument();
   expect(screen.getAllByText("12 PR/일")[0]).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "취소" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(onScenario).not.toHaveBeenCalled();
 
-  fireEvent.click(screen.getByRole("button", { name: "적용 가능한 값 모두 적용" }));
+  fireEvent.click(screen.getByRole("button", { name: "이 값 적용" }));
   fireEvent.click(screen.getByRole("button", { name: "적용" }));
 
   expect(onScenario).toHaveBeenCalledWith(expect.objectContaining({
