@@ -22,7 +22,7 @@ export interface MergePolicy {
 
 interface Task { prIds: PrId[]; allowLlm: boolean }
 interface Arrival { id: PrId; time: number }
-interface BorsBatch {
+interface PendingBatch {
   prIds: PrId[];
   createdAt: number;
   readyAt: number;
@@ -72,31 +72,16 @@ class SequentialPolicy extends BasePolicy {
   }
 }
 
-class BatchSplitPolicy extends BasePolicy {
-  declare readonly config: Extract<PolicyConfig, { kind: "batchSplit" }>;
+type ConfigurableBatchConfig = Extract<PolicyConfig, { kind: "batchSplit" | "bors" | "llmAssisted" }>;
 
-  constructor(config: Extract<PolicyConfig, { kind: "batchSplit" }>) { super(config); this.config = config; }
-
-  onBatchFailed(_batchId: BatchId, prIds: PrId[]): void { this.enqueueSplit(prIds, this.config.splitRatio); }
-
-  protected freshAction(observation: PolicyObservation): PolicyAction[] {
-    if (!this.fresh.length) return [];
-    const due = observation.now >= this.fresh[0].time + this.config.maxWait;
-    if (this.fresh.length >= this.config.batchSize || due || observation.allArrived) {
-      const chosen = this.fresh.splice(0, this.config.batchSize).map((item) => item.id);
-      return [{ type: "submitCi", prIds: chosen, allowLlm: false }];
-    }
-    return [{ type: "waitUntil", time: this.fresh[0].time + this.config.maxWait }];
-  }
-}
-
-class BorsPolicy implements MergePolicy {
-  declare readonly config: Extract<PolicyConfig, { kind: "bors" }>;
-  private pending: BorsBatch[] = [];
-  private failedToSplit: PrId[][] = [];
+class ConfigurableBatchPolicy implements MergePolicy {
+  readonly config: ConfigurableBatchConfig;
+  private pending: PendingBatch[] = [];
+  private pendingRecoveryBatches: PrId[][] = [];
+  private pendingLlm: Array<{ batchId: BatchId; prIds: PrId[] }> = [];
   private nextOrder = 0;
 
-  constructor(config: Extract<PolicyConfig, { kind: "bors" }>) { this.config = config; }
+  constructor(config: ConfigurableBatchConfig) { this.config = config; }
 
   onArrival(prId: PrId, arrivalTime: number): void {
     const openFresh = [...this.pending].reverse().find((batch) =>
@@ -108,25 +93,36 @@ class BorsPolicy implements MergePolicy {
     this.pending.push(this.makeBatch([prId], arrivalTime, "fresh"));
   }
 
-  onBatchFailed(_batchId: BatchId, prIds: PrId[]): void {
+  onBatchFailed(batchId: BatchId, prIds: PrId[], allowLlm: boolean): void {
     if (prIds.length <= 1) return;
-    const cut = Math.ceil(prIds.length / 2);
-    this.failedToSplit.push(prIds.slice(0, cut), prIds.slice(cut));
+    if (allowLlm && this.config.failureRecovery.mode === "llmThenSplit") {
+      this.pendingLlm.push({ batchId, prIds });
+      return;
+    }
+    const cut = Math.max(1, Math.min(prIds.length - 1, Math.round(prIds.length * this.config.splitRatio)));
+    this.pendingRecoveryBatches.push(prIds.slice(0, cut), prIds.slice(cut));
   }
 
-  onLlmCompleted(_batchId: BatchId, _prIds: PrId[], _suspects: PrId[]): void { /* bors does not use LLM */ }
+  onLlmCompleted(batchId: BatchId, prIds: PrId[], suspects: PrId[]): void {
+    this.pendingLlm = this.pendingLlm.filter((item) => item.batchId !== batchId);
+    const suspectSet = new Set(suspects);
+    const cleared = prIds.filter((id) => !suspectSet.has(id));
+    if (cleared.length) this.pendingRecoveryBatches.push(cleared);
+    this.pendingRecoveryBatches.push(...suspects.map((id) => [id]));
+  }
 
   decide(observation: PolicyObservation): PolicyAction[] {
     this.materializeSplitBatches(observation.now);
-    if (!observation.ciIdle || !this.pending.length) return [];
+    const actions: PolicyAction[] = this.pendingLlm.map(({ batchId }) => ({ type: "callLlm", failedBatchId: batchId }));
+    this.pendingLlm = [];
+    if (!observation.ciIdle || !this.pending.length) return actions;
 
     const ready = this.pending
       .map((batch, index) => ({ batch, index }))
-      .filter(({ batch }) =>
-        batch.readyAt <= observation.now || (observation.allArrived && batch.origin === "fresh"));
+      .filter(({ batch }) => this.isReady(batch, observation));
 
     if (!ready.length) {
-      return [{ type: "waitUntil", time: Math.min(...this.pending.map((batch) => batch.readyAt)) }];
+      return [...actions, { type: "waitUntil", time: Math.min(...this.pending.map((batch) => batch.readyAt)) }];
     }
 
     const readySplits = ready.filter(({ batch }) => batch.origin === "split");
@@ -136,62 +132,31 @@ class BorsPolicy implements MergePolicy {
       (candidate.batch.createdAt === first.batch.createdAt && candidate.batch.order < first.batch.order)
         ? candidate : first);
     const [{ prIds }] = this.pending.splice(chosen.index, 1);
-    return [{ type: "submitCi", prIds, allowLlm: false }];
+    const allowLlm = chosen.batch.origin === "fresh" && this.config.failureRecovery.mode === "llmThenSplit";
+    return [...actions, { type: "submitCi", prIds, allowLlm }];
   }
 
-  hasPendingWork(): boolean { return this.pending.length > 0 || this.failedToSplit.length > 0; }
+  hasPendingWork(): boolean { return this.pending.length > 0 || this.pendingRecoveryBatches.length > 0 || this.pendingLlm.length > 0; }
+
+  private isReady(batch: PendingBatch, observation: PolicyObservation): boolean {
+    if (batch.origin === "split") return batch.readyAt <= observation.now;
+    if (observation.allArrived || batch.readyAt <= observation.now) return true;
+    return this.config.batchTiming.mode === "sizeOrTimeout" && batch.prIds.length >= this.config.maxBatchSize;
+  }
 
   private materializeSplitBatches(now: number): void {
-    if (!this.failedToSplit.length) return;
-    this.pending.push(...this.failedToSplit.map((prIds) => this.makeBatch(prIds, now, "split")));
-    this.failedToSplit = [];
+    if (!this.pendingRecoveryBatches.length) return;
+    this.pending.push(...this.pendingRecoveryBatches.map((prIds) => this.makeBatch(prIds, now, "split")));
+    this.pendingRecoveryBatches = [];
   }
 
-  private makeBatch(prIds: PrId[], createdAt: number, origin: BorsBatch["origin"]): BorsBatch {
-    return { prIds, createdAt, readyAt: createdAt + this.config.batchDelay, origin, order: this.nextOrder++ };
-  }
-}
-
-class LlmAssistedPolicy extends BasePolicy {
-  declare readonly config: Extract<PolicyConfig, { kind: "llmAssisted" }>;
-
-  constructor(config: Extract<PolicyConfig, { kind: "llmAssisted" }>) { super(config); this.config = config; }
-
-  onBatchFailed(batchId: BatchId, prIds: PrId[], allowLlm: boolean): void {
-    if (allowLlm) this.pendingLlm.push({ batchId, prIds });
-    else this.enqueueSplit(prIds);
-  }
-
-  onLlmCompleted(batchId: BatchId, prIds: PrId[], suspects: PrId[]): void {
-    this.pendingLlm = this.pendingLlm.filter((item) => item.batchId !== batchId);
-    const suspectSet = new Set(suspects);
-    const cleared = prIds.filter((id) => !suspectSet.has(id));
-    const tasks: Task[] = [];
-    if (cleared.length) tasks.push({ prIds: cleared, allowLlm: false });
-    tasks.push(...suspects.map((id) => ({ prIds: [id], allowLlm: false })));
-    this.priority.push(...tasks);
-  }
-
-  decide(observation: PolicyObservation): PolicyAction[] {
-    const actions: PolicyAction[] = this.pendingLlm.map(({ batchId }) => ({ type: "callLlm", failedBatchId: batchId }));
-    this.pendingLlm = [];
-    if (!observation.ciIdle) return actions;
-    const priority = this.priority.shift();
-    if (priority) return [...actions, { type: "submitCi", ...priority }];
-    return [...actions, ...this.freshAction(observation)];
-  }
-
-  protected freshAction(observation: PolicyObservation): PolicyAction[] {
-    if (!this.fresh.length) return [];
-    const due = observation.now >= this.fresh[0].time + this.config.maxWait;
-    if (this.fresh.length >= this.config.batchSize || due || observation.allArrived) {
-      return [{ type: "submitCi", prIds: this.fresh.splice(0, this.config.batchSize).map((item) => item.id), allowLlm: true }];
-    }
-    return [{ type: "waitUntil", time: this.fresh[0].time + this.config.maxWait }];
+  private makeBatch(prIds: PrId[], createdAt: number, origin: PendingBatch["origin"]): PendingBatch {
+    const delay = origin === "fresh" ? this.config.batchTiming.minutes : this.config.splitBatchDelayMinutes;
+    return { prIds, createdAt, readyAt: createdAt + delay, origin, order: this.nextOrder++ };
   }
 }
 
 export const createSequentialPolicy = (config: Extract<PolicyConfig, { kind: "sequential" }>): MergePolicy => new SequentialPolicy(config);
-export const createBatchSplitPolicy = (config: Extract<PolicyConfig, { kind: "batchSplit" }>): MergePolicy => new BatchSplitPolicy(config);
-export const createBorsPolicy = (config: Extract<PolicyConfig, { kind: "bors" }>): MergePolicy => new BorsPolicy(config);
-export const createLlmAssistedPolicy = (config: Extract<PolicyConfig, { kind: "llmAssisted" }>): MergePolicy => new LlmAssistedPolicy(config);
+export const createBatchSplitPolicy = (config: Extract<PolicyConfig, { kind: "batchSplit" }>): MergePolicy => new ConfigurableBatchPolicy(config);
+export const createBorsPolicy = (config: Extract<PolicyConfig, { kind: "bors" }>): MergePolicy => new ConfigurableBatchPolicy(config);
+export const createLlmAssistedPolicy = (config: Extract<PolicyConfig, { kind: "llmAssisted" }>): MergePolicy => new ConfigurableBatchPolicy(config);

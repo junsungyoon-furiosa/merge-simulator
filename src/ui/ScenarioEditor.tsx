@@ -51,6 +51,22 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 const coveragePercent = (coverage: number) => Number((coverage * 100).toFixed(4));
 const percentageInput = (value: number) => Number((value * 100).toFixed(6));
 
+type PolicyFieldValue = number | string;
+
+function policyFieldValue(config: PolicyConfig, key: string): PolicyFieldValue {
+  const [parent, child] = key.split(".");
+  const record = config as unknown as Record<string, unknown>;
+  if (!child) return record[parent] as PolicyFieldValue;
+  return (record[parent] as Record<string, PolicyFieldValue>)[child];
+}
+
+function withPolicyFieldValue(config: PolicyConfig, key: string, value: PolicyFieldValue): PolicyConfig {
+  const [parent, child] = key.split(".");
+  if (!child) return { ...config, [parent]: value } as PolicyConfig;
+  const record = config as unknown as Record<string, unknown>;
+  return { ...config, [parent]: { ...(record[parent] as Record<string, unknown>), [child]: value } } as PolicyConfig;
+}
+
 function Field({ title, description, unit, wide = false, defaultControl, children }: FieldProps) {
   const inputId = useId();
   const tooltipId = `${inputId}-help`;
@@ -78,7 +94,7 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
   const setNumber = (key: "prCount" | "targetMergeCount" | "repetitions", value: number) => onScenario({ ...scenario, [key]: value });
   const setPolicyValue = (policyId: string, key: string, value: number | string) => {
     onPolicies(policies.map((policy) => policy.id === policyId
-      ? { ...policy, config: { ...policy.config, [key]: value } as PolicyConfig }
+      ? { ...policy, config: withPolicyFieldValue(policy.config, key, value) }
       : policy));
   };
   const duplicatePolicy = (policy: PolicyInstance) => {
@@ -209,12 +225,20 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
         <div className="policy-list">
           {policies.map((policy, index) => {
             const definition = getPolicyDefinition(policy.config.kind);
-            const values = policy.config as unknown as Record<string, number | string>;
             return (
               <article className="policy-instance" key={policy.id} data-policy-id={policy.id}>
                 <div className="policy-instance-heading">
                   <b>{String(index + 1).padStart(2, "0")}</b>
                   <div><strong>{definition.label}</strong><small>{definition.description}</small></div>
+                  <span className="info-tip policy-info-tip">
+                    <button type="button" className="info-icon" aria-label={(index + 1) + "번 " + definition.label + " 정책 도움말"} aria-describedby={"policy-help-" + (index + 1)}>i</button>
+                    <span id={"policy-help-" + (index + 1)} className="info-tooltip policy-info-tooltip" role="tooltip">
+                      <span className="policy-info-intro">{definition.description}</span>
+                      {definition.fields.length ? definition.fields.map((field) => (
+                        <span className="policy-info-item" key={field.key}><strong>{field.label}:</strong> {field.description}</span>
+                      )) : <span className="policy-info-item">설정 파라미터가 없습니다.</span>}
+                    </span>
+                  </span>
                 </div>
                 {definition.fields.length > 0 && (
                   <div className="policy-field-grid">
@@ -228,13 +252,13 @@ export function ScenarioEditor({ scenario, policies, disabled, onScenario, onPol
                             min={field.min}
                             max={field.max}
                             step={field.step}
-                            value={values[field.key]}
+                            value={policyFieldValue(policy.config, field.key)}
                             onChange={(event) => setPolicyValue(policy.id, field.key, Number(event.target.value))}
                           />
                         ) : (
                           <select
                             aria-label={`${index + 1}번 ${definition.label} ${field.label}`}
-                            value={values[field.key]}
+                            value={policyFieldValue(policy.config, field.key)}
                             onChange={(event) => setPolicyValue(policy.id, field.key, event.target.value)}
                           >
                             {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

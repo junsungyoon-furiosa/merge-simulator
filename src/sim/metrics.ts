@@ -27,9 +27,12 @@ export function calculateMetrics(world: HiddenWorld, events: SimEvent[], endReas
   const merged = world.prs.filter((pr) => pr.status === "merged");
   const defectiveMerged = merged.filter((pr) => pr.individualDefect);
   const quarantined = world.prs.filter((pr) => pr.status === "quarantined");
+  const resolved = [...merged, ...quarantined];
+  const resolutionTimes = resolved.map((pr) => (pr.status === "merged" ? pr.mergedAt! : pr.quarantinedAt!) - pr.arrivalTime);
   const normalMergeTimes = merged.filter((pr) => !pr.individualDefect).map((pr) => pr.mergedAt! - pr.arrivalTime);
   const quarantineTimes = quarantined.map((pr) => pr.quarantinedAt! - pr.arrivalTime);
   const completedInteractions = world.interactions.filter((interaction) => interaction.members.every((id) => world.prs.find((pr) => pr.id === id)?.status === "merged"));
+  const ciStartedEvents = events.filter((event) => event.type === "ciStarted");
   const ciEvents = events.filter((event) => event.type === "ciCompleted");
   const llmEvents = events.filter((event) => event.type === "llmCompleted");
   const ciBusy = ciEvents.reduce((sum, event) => sum + Number(event.data?.duration ?? 0), 0);
@@ -56,7 +59,7 @@ export function calculateMetrics(world: HiddenWorld, events: SimEvent[], endReas
     maxQueue = Math.max(maxQueue, queue);
   }
 
-  const statusCounts = Object.fromEntries(["scheduled", "waiting", "ciWaiting", "ciRunning", "investigating", "suspected", "merged", "quarantined"].map((status) => [status, 0])) as Record<PrStatus, number>;
+  const statusCounts = Object.fromEntries(["scheduled", "waiting", "ciWaiting", "ciRunning", "investigating", "notSuspected", "suspected", "merged", "quarantined"].map((status) => [status, 0])) as Record<PrStatus, number>;
   world.prs.forEach((pr) => { statusCounts[pr.status] += 1; });
   const totalCauseCount = llmEvents.reduce((sum, event) => sum + Number(event.data?.causeCount ?? 0), 0);
   const coveredCauseCount = llmEvents.reduce((sum, event) => sum + Number(event.data?.coveredCauseCount ?? 0), 0);
@@ -66,12 +69,28 @@ export function calculateMetrics(world: HiddenWorld, events: SimEvent[], endReas
   const llmCalls = llmEvents.length;
   const ciSuccesses = ciEvents.filter((event) => event.data?.observedSuccess === true).length;
   const ciFailures = ciEvents.filter((event) => event.data?.observedSuccess === false).length;
+  const averageBatchSize = describe(ciStartedEvents.map((event) => event.prIds?.length ?? 0)).mean;
+  const averageSuccessfulBatchSize = describe(ciEvents
+    .filter((event) => event.data?.observedSuccess === true)
+    .map((event) => event.prIds?.length ?? 0)).mean;
+  const averageFailedBatchSize = describe(ciEvents
+    .filter((event) => event.data?.observedSuccess === false)
+    .map((event) => event.prIds?.length ?? 0)).mean;
+  const singletonCiRunRate = ciStartedEvents.length
+    ? ciStartedEvents.filter((event) => event.prIds?.length === 1).length / ciStartedEvents.length
+    : null;
+  const mergedPrsPerCiRun = ciStartedEvents.length ? merged.length / ciStartedEvents.length : null;
   const ciSeen = new Set<string>();
+  const ciRunsByPr = new Map<string, number>();
   let ciRetries = 0;
   for (const event of events.filter((candidate) => candidate.type === "ciStarted")) {
     if ((event.prIds ?? []).some((id) => ciSeen.has(id))) ciRetries += 1;
-    (event.prIds ?? []).forEach((id) => ciSeen.add(id));
+    (event.prIds ?? []).forEach((id) => {
+      ciSeen.add(id);
+      ciRunsByPr.set(id, (ciRunsByPr.get(id) ?? 0) + 1);
+    });
   }
+  const averageCiRunsPerResolvedPr = describe(resolved.map((pr) => ciRunsByPr.get(pr.id) ?? 0)).mean;
   const ciRunsWhileMasterUnhealthy = events.filter((event) => event.type === "ciStarted" && event.data?.masterHealthyAtStart === false).length;
   const mergesWhileMasterUnhealthy = events.filter((event) => event.type === "masterChanged" && event.data?.previousHealthy === false).reduce((sum, event) => sum + (event.prIds?.length ?? 0), 0);
 
@@ -83,12 +102,13 @@ export function calculateMetrics(world: HiddenWorld, events: SimEvent[], endReas
     harmfulInteractionRate: world.interactions.length ? completedInteractions.length / world.interactions.length : null,
     masterBecameUnhealthy: firstUnhealthy === undefined ? 0 : 1,
     unhealthyMasterDuration: firstUnhealthy === undefined ? 0 : endTime - firstUnhealthy,
-    normalMergeTime: describe(normalMergeTimes), quarantineTime: describe(quarantineTimes),
+    resolutionTime: describe(resolutionTimes), normalMergeTime: describe(normalMergeTimes), quarantineTime: describe(quarantineTimes),
     throughput: endTime ? merged.length / endTime : null,
     normalThroughput: endTime ? (merged.length - defectiveMerged.length) / endTime : null,
     defectiveThroughput: endTime ? defectiveMerged.length / endTime : null,
     ciRuns, ciSuccesses, ciFailures,
-    ciInvalidations: events.filter((event) => event.type === "ciInvalidated").length, ciRetries,
+    ciInvalidations: events.filter((event) => event.type === "ciInvalidated").length, ciRetries, averageCiRunsPerResolvedPr,
+    averageBatchSize, averageSuccessfulBatchSize, averageFailedBatchSize, singletonCiRunRate, mergedPrsPerCiRun,
     ciUtilization: endTime ? Math.min(1, ciBusy / endTime) : null, ciIdleTime: Math.max(0, endTime - ciBusy),
     llmCalls,
     llmSuccesses: llmEvents.filter((event) => event.data?.grade === "success").length,

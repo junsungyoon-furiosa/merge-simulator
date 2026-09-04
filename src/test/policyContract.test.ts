@@ -55,7 +55,7 @@ describe.each(POLICY_DEFINITIONS)("$label policy contract", (definition) => {
 });
 
 test("same config instances keep identical random outcomes regardless of id or order", () => {
-  const first: PolicyInstance = { id: "batch-a", config: { kind: "batchSplit", batchSize: 8, maxWait: 30, splitRatio: 0.5 } };
+  const first: PolicyInstance = { id: "batch-a", config: { kind: "batchSplit", maxBatchSize: 8, splitRatio: 0.5, splitBatchScheduling: "beforeFresh", batchTiming: { mode: "sizeOrTimeout", minutes: 30 }, splitBatchDelayMinutes: 0, failureRecovery: { mode: "splitOnly" } } };
   const second: PolicyInstance = { id: "batch-b", config: structuredClone(first.config) };
   const forward = runExperiment(contractScenario, [first, second]);
   const reverse = runExperiment(contractScenario, [second, first]);

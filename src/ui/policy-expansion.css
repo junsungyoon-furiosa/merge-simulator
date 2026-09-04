@@ -4,10 +4,18 @@
   border: 1px solid var(--line); border-radius: 9px;
   background: rgba(255,255,255,.86); box-shadow: var(--shadow-card);
 }
-.policy-instance-heading { display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: start; gap: 7px; }
+.policy-instance-heading { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: start; gap: 7px; }
+.policy-info-tip { align-self: start; }
+.policy-info-tooltip { right: 0; left: auto; width: 300px; transform: translate(0, -3px); }
+.policy-info-tooltip::before { right: 3px; left: auto; transform: none; }
+.policy-info-tip:hover .policy-info-tooltip, .policy-info-tip:focus-within .policy-info-tooltip { transform: translate(0, 0); }
+.policy-info-intro { display: block; margin-bottom: 7px; color: #fff; font-weight: 700; }
+.policy-info-item { display: block; padding: 5px 0; border-top: 1px solid rgba(255,255,255,.1); }
+.policy-info-item strong { color: #9fe3d5; }
 .policy-instance-heading > b { color: var(--primary-strong); font: 10px var(--font-mono); }
 .policy-instance-heading strong { display: block; color: var(--text); font-size: 12px; }
 .policy-instance-heading small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.policy-instance-heading .policy-info-item strong { display: inline; color: #9fe3d5; font-size: inherit; }
 .policy-field-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
 .policy-field-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 9px; }
 .policy-field-grid input, .policy-field-grid select, .policy-add-row select {

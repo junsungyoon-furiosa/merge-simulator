@@ -8,7 +8,7 @@ interface MergeSimulatorDb extends DBSchema {
   experiments: { key: string; value: ExperimentResult };
 }
 
-const db = () => openDB<MergeSimulatorDb>("merge-lab", 2, {
+const db = () => openDB<MergeSimulatorDb>("merge-lab", 4, {
   upgrade(database, oldVersion, _newVersion, transaction) {
     if (oldVersion === 0) {
       database.createObjectStore("scenarios", { keyPath: "id" });

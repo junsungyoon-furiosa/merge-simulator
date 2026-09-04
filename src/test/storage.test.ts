@@ -51,32 +51,36 @@ test("rejects unknown calibration parameter ids", () => {
   expect(() => fromJson(JSON.stringify({ schemaVersion: 1, scenario, policies: DEFAULT_POLICIES }))).toThrow();
 });
 
-test("JSON preserves bors scheduling settings", () => {
+test("JSON preserves configurable Bors preset settings", () => {
   const policies: PolicyInstance[] = [{
     id: "bors-fifo",
-    config: { kind: "bors", maxBatchSize: 12, batchDelay: 20, splitBatchScheduling: "fifo" },
+    config: { kind: "bors", maxBatchSize: 12, splitRatio: 0.5, splitBatchScheduling: "fifo", batchTiming: { mode: "fixedDelay", minutes: 20 }, splitBatchDelayMinutes: 20, failureRecovery: { mode: "splitOnly" } },
   }];
   expect(fromJson(toJson(DEFAULT_SCENARIO, policies)).policies).toEqual(policies);
 });
 
 test("CSV distinguishes same-kind policy instances and includes their configs", () => {
   const policies = [
-    { id: "batch-small", config: { kind: "batchSplit" as const, batchSize: 4, maxWait: 10, splitRatio: 0.5 } },
-    { id: "batch-large", config: { kind: "batchSplit" as const, batchSize: 16, maxWait: 10, splitRatio: 0.5 } },
+    { id: "batch-small", config: { kind: "batchSplit" as const, maxBatchSize: 4, splitRatio: 0.5, splitBatchScheduling: "beforeFresh" as const, batchTiming: { mode: "sizeOrTimeout" as const, minutes: 10 }, splitBatchDelayMinutes: 0, failureRecovery: { mode: "splitOnly" as const } } },
+    { id: "batch-large", config: { kind: "batchSplit" as const, maxBatchSize: 16, splitRatio: 0.5, splitBatchScheduling: "beforeFresh" as const, batchTiming: { mode: "sizeOrTimeout" as const, minutes: 10 }, splitBatchDelayMinutes: 0, failureRecovery: { mode: "splitOnly" as const } } },
   ];
   const result = runExperiment({ ...DEFAULT_SCENARIO, prCount: 20, targetMergeCount: 10, repetitions: 1 }, policies);
   const csv = resultToCsv(result);
   expect(csv).toContain("policyId,policyKind,policyLabel,policyConfig");
+  expect(csv).toContain("resolutionTimeMean,averageCiRunsPerResolvedPr,averageBatchSize,averageSuccessfulBatchSize,averageFailedBatchSize,singletonCiRunRate,mergedPrsPerCiRun");
   expect(csv).toContain("batch-small");
   expect(csv).toContain("batch-large");
-  expect(csv).toContain("batchSize");
+  expect(csv).toContain("maxBatchSize");
 });
 
 test("round-trips a current experiment result", () => {
   const resultScenario = { ...DEFAULT_SCENARIO, prCount: 100, targetMergeCount: 10, repetitions: 10 };
   const result = runExperiment(resultScenario, DEFAULT_POLICIES);
-  const imported = fromJson(toJson(DEFAULT_SCENARIO, DEFAULT_POLICIES, result));
+  const serialized = JSON.parse(toJson(DEFAULT_SCENARIO, DEFAULT_POLICIES, result));
+  delete serialized.result.results[0].runs[0].metrics.finalStates.notSuspected;
+  const imported = fromJson(JSON.stringify(serialized));
   expect(imported.result?.scenario).toEqual(resultScenario);
   expect(imported.result?.policies).toEqual(DEFAULT_POLICIES);
   expect(imported.result?.results.map((item) => item.policy.id)).toEqual(DEFAULT_POLICIES.map((policy) => policy.id));
+  expect(imported.result?.results[0].runs[0].metrics.finalStates.notSuspected).toBe(0);
 });

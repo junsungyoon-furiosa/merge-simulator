@@ -38,7 +38,7 @@ test("renders the simulator's primary action and registered default policies", (
   expect(screen.getAllByText(/순차 CI/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/배치 분할/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/LLM 보조/).length).toBeGreaterThan(0);
-  expect(screen.getByRole("option", { name: "Bors 기준" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "Bors 프리셋" })).toBeInTheDocument();
 });
 
 test("does not expose environment evidence navigation from the simulator", () => {
@@ -52,6 +52,13 @@ test("provides help tooltips for every scenario field", () => {
   render(<App />);
   expect(screen.getAllByRole("button", { name: "도움말" })).toHaveLength(21);
   expect(screen.getByText(/비정상인 후보 master를 CI가 성공으로 잘못 판정/)).toHaveAttribute("role", "tooltip");
+  expect(screen.getAllByRole("button", { name: /정책 도움말/ })).toHaveLength(3);
+  const batchHelp = screen.getByRole("button", { name: "2번 배치 분할 정책 도움말" });
+  const batchTooltip = document.getElementById(batchHelp.getAttribute("aria-describedby")!);
+  expect(batchTooltip).toHaveTextContent("최대 배치 크기");
+  expect(batchTooltip).toHaveTextContent("배치가 가득 차면 즉시 시작");
+  expect(batchTooltip).toHaveTextContent("분할 배치 지연");
+  expect(batchTooltip).toHaveTextContent("실패 복구 방식");
 });
 
 test("adds, duplicates, and removes policy instances with unique ids", () => {
@@ -76,13 +83,19 @@ test("adds and configures the registered bors policy", () => {
   fireEvent.change(screen.getByLabelText("추가할 정책"), { target: { value: "bors" } });
   fireEvent.click(screen.getByRole("button", { name: "정책 추가" }));
 
-  expect(screen.getByText("Bors 기준", { selector: ".policy-instance-heading strong" })).toBeInTheDocument();
-  expect(screen.getByLabelText("4번 Bors 기준 최대 배치 크기")).toHaveValue(8);
-  expect(screen.getByLabelText("4번 Bors 기준 배치 지연(분)")).toHaveValue(30);
-  expect(screen.getByLabelText("4번 Bors 기준 분할 배치 순서")).toHaveValue("fifo");
+  expect(screen.getByText("Bors 프리셋", { selector: ".policy-instance-heading strong" })).toBeInTheDocument();
+  expect(screen.getByLabelText("4번 Bors 프리셋 최대 배치 크기")).toHaveValue(8);
+  expect(screen.getByLabelText("4번 Bors 프리셋 배치 구성 방식")).toHaveValue("fixedDelay");
+  expect(screen.getByLabelText("4번 Bors 프리셋 배치 대기 시간(분)")).toHaveValue(30);
+  expect(screen.getByLabelText("4번 Bors 프리셋 분할 비율")).toHaveValue(0.5);
+  expect(screen.getByLabelText("4번 Bors 프리셋 분할 배치 지연(분)")).toHaveValue(30);
+  expect(screen.getByLabelText("4번 Bors 프리셋 분할 배치 순서")).toHaveValue("fifo");
+  expect(screen.getByLabelText("4번 Bors 프리셋 실패 복구 방식")).toHaveValue("splitOnly");
 
-  fireEvent.change(screen.getByLabelText("4번 Bors 기준 분할 배치 순서"), { target: { value: "beforeFresh" } });
-  expect(screen.getByLabelText("4번 Bors 기준 분할 배치 순서")).toHaveValue("beforeFresh");
+  fireEvent.change(screen.getByLabelText("4번 Bors 프리셋 배치 구성 방식"), { target: { value: "sizeOrTimeout" } });
+  fireEvent.change(screen.getByLabelText("4번 Bors 프리셋 분할 배치 순서"), { target: { value: "beforeFresh" } });
+  expect(screen.getByLabelText("4번 Bors 프리셋 배치 구성 방식")).toHaveValue("sizeOrTimeout");
+  expect(screen.getByLabelText("4번 Bors 프리셋 분할 배치 순서")).toHaveValue("beforeFresh");
 });
 
 test("resets all scenario and policy inputs to recommended defaults", async () => {
@@ -98,8 +111,8 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
   fireEvent.click(screen.getByRole("checkbox", { name: "LLM 적중률 기본값 사용" }));
   fireEvent.change(screen.getByLabelText("LLM 적중률"), { target: { value: "25" } });
   fireEvent.change(screen.getByLabelText("CI 1회 비용"), { target: { value: "9" } });
-  fireEvent.change(screen.getByLabelText("2번 배치 분할 배치 크기"), { target: { value: "16" } });
-  fireEvent.change(screen.getByLabelText("3번 LLM 보조 배치 크기"), { target: { value: "20" } });
+  fireEvent.change(screen.getByLabelText("2번 배치 분할 최대 배치 크기"), { target: { value: "16" } });
+  fireEvent.change(screen.getByLabelText("3번 LLM 보조 프리셋 최대 배치 크기"), { target: { value: "20" } });
   fireEvent.click(screen.getByRole("button", { name: "정책 추가" }));
 
   fireEvent.click(screen.getByRole("button", { name: "기본값으로 초기화" }));
@@ -112,8 +125,8 @@ test("resets all scenario and policy inputs to recommended defaults", async () =
   expect(screen.getByRole("checkbox", { name: "근무일당 평균 PR 생성 수 기본값 사용" })).toBeChecked();
   expect(screen.getByRole("checkbox", { name: "CI 실패 시간 기본 분포 사용" })).toBeChecked();
   expect(screen.getByLabelText("CI 1회 비용")).toHaveValue(null);
-  expect(screen.getByLabelText("2번 배치 분할 배치 크기")).toHaveValue(8);
-  expect(screen.getByLabelText("3번 LLM 보조 배치 크기")).toHaveValue(8);
+  expect(screen.getByLabelText("2번 배치 분할 최대 배치 크기")).toHaveValue(8);
+  expect(screen.getByLabelText("3번 LLM 보조 프리셋 최대 배치 크기")).toHaveValue(8);
   expect(container.querySelectorAll(".policy-instance")).toHaveLength(3);
 
   fireEvent.click(screen.getByRole("button", { name: /시뮬레이션 시작/ }));
@@ -129,7 +142,7 @@ test("replays the selected experiment snapshot by policy instance id", async () 
   const resultScenario = { ...DEFAULT_SCENARIO, name: "완료된 실험", seed: "result-seed", prCount: 123, targetMergeCount: 100 };
   const resultPolicies: PolicyInstance[] = [
     structuredClone(DEFAULT_POLICIES[0]),
-    { id: "result-batch", config: { kind: "batchSplit", batchSize: 4, maxWait: 12, splitRatio: 0.25 } },
+    { id: "result-batch", config: { kind: "batchSplit", maxBatchSize: 4, splitRatio: 0.25, splitBatchScheduling: "beforeFresh", batchTiming: { mode: "sizeOrTimeout", minutes: 12 }, splitBatchDelayMinutes: 0, failureRecovery: { mode: "splitOnly" } } },
     structuredClone(DEFAULT_POLICIES[2]),
   ];
   const experiment: ExperimentResult = {
@@ -148,7 +161,7 @@ test("replays the selected experiment snapshot by policy instance id", async () 
   await screen.findByRole("heading", { name: "정책 비교 결과" });
 
   fireEvent.change(screen.getByLabelText("전체 PR"), { target: { value: "777" } });
-  fireEvent.change(screen.getByLabelText("2번 배치 분할 배치 크기"), { target: { value: "16" } });
+  fireEvent.change(screen.getByLabelText("2번 배치 분할 최대 배치 크기"), { target: { value: "16" } });
   fireEvent.click(screen.getAllByRole("button", { name: /실행 재생/ })[1]);
 
   await waitFor(() => expect(simulation.replay).toHaveBeenCalled());

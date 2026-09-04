@@ -66,8 +66,7 @@
 ```ts
 type PolicyConfig =
   | SequentialConfig
-  | BatchSplitConfig
-  | LlmAssistedConfig;
+  | ({ kind: "batchSplit" | "bors" | "llmAssisted" } & ConfigurableBatchSettings);
 
 interface PolicyInstance {
   id: string;
@@ -76,7 +75,7 @@ interface PolicyInstance {
 }
 ```
 
-- `kind`: 어떤 알고리즘 구현을 사용할지 식별
+- `kind`: 등록된 정책 선택지와 초기 프리셋의 정체성을 식별
 - `id`: 한 실험 안의 비교 항목을 고유하게 식별
 - `name`: 필요한 경우 사용자가 설정 변형을 이해하기 위한 표시 이름
 - `config`: 정책 알고리즘의 매개변수

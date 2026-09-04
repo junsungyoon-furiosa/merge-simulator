@@ -3,8 +3,8 @@ import { describe } from "./metrics";
 import type { ExperimentResult, MetricSummary, PolicyExperimentResult, PolicyInstance, RunMetrics, ScenarioConfig } from "./model";
 
 const METRIC_PATHS = [
-  "mergedPrs", "defectIngressRate", "harmfulInteractionRate", "normalMergeTime.mean", "normalMergeTime.p95",
-  "throughput", "normalThroughput", "defectiveThroughput", "ciRuns", "ciRetries", "ciUtilization", "llmCalls", "llmCoverage", "llmDuration.mean", "falseQuarantines", "averageQueueLength", "p95WaitTime",
+  "mergedPrs", "defectIngressRate", "harmfulInteractionRate", "resolutionTime.mean", "resolutionTime.p95", "normalMergeTime.mean", "normalMergeTime.p95",
+  "throughput", "normalThroughput", "defectiveThroughput", "ciRuns", "ciRetries", "averageCiRunsPerResolvedPr", "averageBatchSize", "averageSuccessfulBatchSize", "averageFailedBatchSize", "singletonCiRunRate", "mergedPrsPerCiRun", "ciUtilization", "llmCalls", "llmCoverage", "llmDuration.mean", "falseQuarantines", "averageQueueLength", "p95WaitTime",
 ];
 
 function valueAt(metrics: RunMetrics, path: string): number | null {

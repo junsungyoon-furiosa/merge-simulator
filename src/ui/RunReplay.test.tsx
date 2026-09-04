@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import type { PrStatus, SimEvent } from "../sim/model";
 import { RunReplay } from "./RunReplay";
 
-const statuses: PrStatus[] = ["scheduled", "waiting", "ciWaiting", "ciRunning", "investigating", "suspected", "merged", "quarantined"];
+const statuses: PrStatus[] = ["scheduled", "waiting", "ciWaiting", "ciRunning", "investigating", "notSuspected", "suspected", "merged", "quarantined"];
 
 test("renders replay legend status names in Korean", () => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
@@ -26,7 +26,7 @@ test("renders replay legend status names in Korean", () => {
   fireEvent.click(screen.getByRole("button", { name: "즉시 완료" }));
   expect(screen.getByText("T+ 26시간 30분")).toBeInTheDocument();
 
-  for (const label of ["도착 예정", "대기", "CI 대기", "CI 실행", "조사", "의심", "머지", "격리"]) {
+  for (const label of ["도착 예정", "대기", "CI 대기", "CI 실행", "조사", "비의심", "의심", "머지", "격리"]) {
     expect(screen.getByText(`${label} 1`)).toBeInTheDocument();
   }
 });

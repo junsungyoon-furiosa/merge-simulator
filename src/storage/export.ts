@@ -10,6 +10,17 @@ function normalizeResultPolicy(value: unknown): PolicyInstance {
   return policyInstanceSchema.parse(value);
 }
 
+function normalizeStoredRun(value: unknown, policy: PolicyInstance): unknown {
+  if (!value || typeof value !== "object") return value;
+  const run = value as Record<string, unknown>;
+  if (!run.metrics || typeof run.metrics !== "object") return { ...run, policy };
+  const metrics = run.metrics as Record<string, unknown>;
+  const finalStates = metrics.finalStates && typeof metrics.finalStates === "object"
+    ? metrics.finalStates as Record<string, unknown>
+    : {};
+  return { ...run, policy, metrics: { ...metrics, finalStates: { notSuspected: 0, ...finalStates } } };
+}
+
 export function normalizeExperimentResult(value: unknown): ExperimentResult | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object") throw new Error("실험 결과 형식이 올바르지 않습니다.");
@@ -22,7 +33,7 @@ export function normalizeExperimentResult(value: unknown): ExperimentResult | un
     const item = candidate as Record<string, unknown>;
     const policy = normalizeResultPolicy(item.policy);
     const runs = Array.isArray(item.runs)
-      ? item.runs.map((run) => run && typeof run === "object" ? { ...run, policy } : run)
+      ? item.runs.map((run) => normalizeStoredRun(run, policy))
       : item.runs;
     return { ...item, policy, runs };
   });
@@ -41,11 +52,11 @@ function csvCell(value: unknown): string {
 }
 
 export function resultToCsv(result: ExperimentResult): string {
-  const headers = ["policyId", "policyKind", "policyLabel", "policyConfig", "repetition", "endReason", "mergedPrs", "defectIngressRate", "harmfulInteractionRate", "normalMergeTimeMean", "throughput", "ciRuns", "ciUtilization", "llmCalls", "llmCoverage", "falseQuarantines"];
+  const headers = ["policyId", "policyKind", "policyLabel", "policyConfig", "repetition", "endReason", "mergedPrs", "defectIngressRate", "harmfulInteractionRate", "resolutionTimeMean", "averageCiRunsPerResolvedPr", "averageBatchSize", "averageSuccessfulBatchSize", "averageFailedBatchSize", "singletonCiRunRate", "mergedPrsPerCiRun", "normalMergeTimeMean", "throughput", "ciRuns", "ciUtilization", "llmCalls", "llmCoverage", "falseQuarantines"];
   const rows = result.results.flatMap(({ policy, runs }) => runs.map((run) => [
     policy.id, policy.config.kind, policyLabel(policy), JSON.stringify(policy.config),
     run.repetition, run.metrics.endReason, run.metrics.mergedPrs, run.metrics.defectIngressRate,
-    run.metrics.harmfulInteractionRate, run.metrics.normalMergeTime.mean, run.metrics.throughput,
+    run.metrics.harmfulInteractionRate, run.metrics.resolutionTime.mean, run.metrics.averageCiRunsPerResolvedPr, run.metrics.averageBatchSize, run.metrics.averageSuccessfulBatchSize, run.metrics.averageFailedBatchSize, run.metrics.singletonCiRunRate, run.metrics.mergedPrsPerCiRun, run.metrics.normalMergeTime.mean, run.metrics.throughput,
     run.metrics.ciRuns, run.metrics.ciUtilization, run.metrics.llmCalls, run.metrics.llmCoverage, run.metrics.falseQuarantines,
   ]));
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");

@@ -73,7 +73,7 @@ export function runSimulation(config: ScenarioConfig, policyInstance: PolicyInst
 
   const startCi = (prIds: PrId[], allowLlm: boolean) => {
     if (ciBusy || !prIds.length) throw new Error("CI is not available");
-    if (new Set(prIds).size !== prIds.length || prIds.some((id) => !["waiting", "investigating", "suspected"].includes(prById.get(id)?.status ?? ""))) throw new Error("Policy selected unavailable PRs");
+    if (new Set(prIds).size !== prIds.length || prIds.some((id) => !["waiting", "investigating", "notSuspected", "suspected"].includes(prById.get(id)?.status ?? ""))) throw new Error("Policy selected unavailable PRs");
     ciBusy = true;
     const batchId = `batch-${++batchCounter}`;
     transition(prIds, "ciRunning");
@@ -174,7 +174,7 @@ export function runSimulation(config: ScenarioConfig, policyInstance: PolicyInst
         const culpritSet = new Set(event.actionableCauses.flat());
         const falseAccused = event.suspects.filter((id) => !culpritSet.has(id)).length;
         const grade = causeCount === 0 ? (event.suspects.length ? "failure" : "success") : covered === causeCount ? "success" : covered > 0 ? "partialFailure" : "failure";
-        transition(event.prIds, "investigating");
+        transition(event.prIds.filter((id) => !suspectSet.has(id)), "notSuspected");
         transition(event.suspects, "suspected");
         emit("llmCompleted", { batchId: event.batchId, prIds: event.prIds, data: { duration: event.duration, suspects: event.suspects, causeCount, coveredCauseCount: covered, accusedCount: event.suspects.length, falseAccusedCount: falseAccused, grade } });
         policy.onLlmCompleted(event.batchId, event.prIds, event.suspects);

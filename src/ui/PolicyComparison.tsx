@@ -9,15 +9,42 @@ const num = (value: number | null | undefined, digits = 1) => value == null ? "�
 const mean = (summary: Record<string, MetricSummary>, key: string) => summary[key]?.mean ?? null;
 const policyColor = (index: number) => `hsl(${Math.round((index * 137.508 + 158) % 360)} 52% 43%)`;
 
-export function PolicyComparison({ result, onReplay }: { result: ExperimentResult; onReplay: (policyId: string) => void }) {
-  const points = result.results.map((item) => ({ x: mean(item.summary, "normalMergeTime.mean") ?? 0, y: mean(item.summary, "defectIngressRate") ?? 0 }));
-  const maxX = Math.max(1, ...points.map((point) => point.x));
-  const maxY = Math.max(0.01, ...points.map((point) => point.y));
+const RESULT_METRIC_HELP = [
+  ["PR 평균 판정 시간", "PR이 도착한 뒤 머지 또는 격리로 최종 판정될 때까지 걸린 평균 시간", "최종 판정된 PR의 (머지·격리 시각 - 도착 시각) 평균"],
+  ["결함 PR 유입률", "전체 머지된 PR 중 개별 결함을 가진 PR의 비율", "머지된 개별 결함 PR 수 / 전체 머지된 PR 수"],
+  ["처리량", "시뮬레이션 시간 1분당 머지된 PR 수", "전체 머지된 PR 수 / 시뮬레이션 종료 시각(분)"],
+  ["CI 실행", "완료된 CI 배치 검사의 횟수", "완료된 ciCompleted 이벤트 수"],
+  ["PR당 평균 CI 실행", "최종 판정된 PR 하나가 참여한 CI 검사의 평균 횟수", "최종 판정 PR별 ciStarted 참여 횟수의 평균"],
+  ["배치당 PR 평균 개수", "CI에 제출된 전체 배치가 평균적으로 포함한 PR 개수", "모든 ciStarted 이벤트의 PR 개수 평균(무효화된 실행 포함)"],
+  ["성공 배치의 PR 평균 개수", "CI가 성공으로 판정한 배치가 평균적으로 포함한 PR 개수", "observedSuccess가 true인 ciCompleted 이벤트의 PR 개수 평균"],
+  ["실패 배치의 PR 평균 개수", "CI가 실패로 판정한 배치가 평균적으로 포함한 PR 개수", "observedSuccess가 false인 ciCompleted 이벤트의 PR 개수 평균"],
+  ["단독 CI 실행 비율", "전체 CI 제출 중 PR 하나만 단독으로 검사한 실행의 비율", "PR 개수가 1인 ciStarted 이벤트 수 / 전체 ciStarted 이벤트 수"],
+  ["CI 실행당 최종 머지 PR 수", "CI 실행 한 번이 최종적으로 만들어낸 머지 PR 수", "전체 머지 PR 수 / 전체 ciStarted 이벤트 수(무효화된 실행 포함)"],
+  ["CI 사용률", "전체 시뮬레이션 시간 중 CI가 실행된 시간의 비율", "완료된 CI 소요시간 합계 / 시뮬레이션 종료 시각"],
+  ["정상 PR 오격리", "개별 결함이 없는 PR이 최종적으로 격리된 개수", "격리된 PR 중 individualDefect가 false인 PR 수"],
+] as const;
 
+export function PolicyComparison({ result, onReplay }: { result: ExperimentResult; onReplay: (policyId: string) => void }) {
   return (
     <section className="results" aria-label="정책 비교 결과">
       <div className="result-heading">
-        <div><span className="eyebrow">EXPERIMENT COMPLETE</span><h2>정책 비교 결과</h2></div>
+        <div>
+          <span className="eyebrow">EXPERIMENT COMPLETE</span>
+          <div className="result-title-row">
+            <h2>정책 비교 결과</h2>
+            <span className="info-tip result-info-tip">
+              <button type="button" className="info-icon" aria-label="결과 지표 도움말" aria-describedby="result-metric-help">i</button>
+              <span id="result-metric-help" className="info-tooltip result-metrics-tooltip" role="tooltip">
+                {RESULT_METRIC_HELP.map(([label, meaning, calculation]) => (
+                  <span className="result-metric-help-item" key={label}>
+                    <span><strong>{label}:</strong> {meaning}</span>
+                    <code>{calculation}</code>
+                  </span>
+                ))}
+              </span>
+            </span>
+          </div>
+        </div>
         <span className="runtime">{result.scenario.repetitions * result.policies.length} runs · {(result.elapsedMs / 1000).toFixed(2)}s</span>
       </div>
 
@@ -28,40 +55,23 @@ export function PolicyComparison({ result, onReplay }: { result: ExperimentResul
             <article className="metric-card policy-accent" key={item.policy.id} style={style} data-policy-id={item.policy.id}>
               <div className="card-top"><span>{String(index + 1).padStart(2, "0")}</span><button onClick={() => onReplay(item.policy.id)}>실행 재생 ↗</button></div>
               <h3>{policyLabel(item.policy)}</h3>
-              <div className="hero-metric"><strong>{formatDuration(mean(item.summary, "normalMergeTime.mean"))}</strong><span>정상 PR 평균 머지</span></div>
+              <div className="hero-metric"><strong>{formatDuration(mean(item.summary, "resolutionTime.mean"))}</strong><span>PR 평균 판정 시간</span></div>
               <dl>
                 <div><dt>결함 PR 유입률</dt><dd>{pct(mean(item.summary, "defectIngressRate"))}</dd></div>
                 <div><dt>처리량</dt><dd>{num(mean(item.summary, "throughput"), 3)} /분</dd></div>
                 <div><dt>CI 실행</dt><dd>{num(mean(item.summary, "ciRuns"), 0)}회</dd></div>
+                <div><dt>PR당 평균 CI 실행</dt><dd>{num(mean(item.summary, "averageCiRunsPerResolvedPr"), 2)}회</dd></div>
+                <div><dt>배치당 PR 평균 개수</dt><dd>{num(mean(item.summary, "averageBatchSize"), 2)}개</dd></div>
+                <div><dt>성공 배치의 PR 평균 개수</dt><dd>{num(mean(item.summary, "averageSuccessfulBatchSize"), 2)}개</dd></div>
+                <div><dt>실패 배치의 PR 평균 개수</dt><dd>{num(mean(item.summary, "averageFailedBatchSize"), 2)}개</dd></div>
+                <div><dt>단독 CI 실행 비율</dt><dd>{pct(mean(item.summary, "singletonCiRunRate"))}</dd></div>
+                <div><dt>CI 실행당 최종 머지 PR 수</dt><dd>{num(mean(item.summary, "mergedPrsPerCiRun"), 2)}개</dd></div>
                 <div><dt>CI 사용률</dt><dd>{pct(mean(item.summary, "ciUtilization"))}</dd></div>
-                <div><dt>상호작용 유입</dt><dd>{pct(mean(item.summary, "harmfulInteractionRate"))}</dd></div>
                 <div><dt>정상 PR 오격리</dt><dd>{num(mean(item.summary, "falseQuarantines"), 1)}</dd></div>
               </dl>
             </article>
           );
         })}
-      </div>
-
-      <div className="analysis-grid">
-        <article className="chart-panel">
-          <div className="chart-title"><div><span className="eyebrow">TRADE-OFF MAP</span><h3>안전성 × 속도</h3></div><small>왼쪽 아래일수록 빠르고 안전함</small></div>
-          <svg className="scatter" viewBox="0 0 620 260" role="img" aria-label="정책별 안전성과 속도 산점도">
-            {[0, 1, 2, 3, 4].map((line) => <line key={line} x1="58" x2="600" y1={220 - line * 48} y2={220 - line * 48} />)}
-            <text x="8" y="24">결함률</text><text x="510" y="252">머지 시간 →</text>
-            {points.map((point, index) => {
-              const item = result.results[index];
-              const x = 70 + (point.x / maxX) * 500;
-              const y = 215 - (point.y / maxY) * 180;
-              return <g key={item.policy.id}><circle className="point" style={{ fill: policyColor(index) }} cx={x} cy={y} r="10" /><text x={x + 15} y={y + 5}>{policyLabel(item.policy)}</text></g>;
-            })}
-          </svg>
-        </article>
-        <article className="detail-panel">
-          <span className="eyebrow">READ THE NUMBERS</span><h3>판단을 대신하지 않습니다</h3>
-          <p>동일한 숨겨진 PR 세계를 각 정책에 적용했습니다. 표의 수치는 반복 실행의 평균이며, 정책의 우열은 조직이 중요하게 보는 안전성·속도·비용 기준에 따라 직접 판단하세요.</p>
-          <div className="confidence"><span>신뢰구간</span><b>각 지표에 95% CI 계산됨</b></div>
-          <div className="confidence"><span>재현성</span><b>seed: {result.scenario.seed}</b></div>
-        </article>
       </div>
     </section>
   );

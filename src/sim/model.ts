@@ -75,11 +75,24 @@ export interface ScenarioCalibration {
 
 export const DEFAULT_DURATION_COVERAGE = 0.95;
 
+export type SplitBatchScheduling = "beforeFresh" | "fifo";
+export type BatchTimingMode = "sizeOrTimeout" | "fixedDelay";
+export type FailureRecoveryMode = "splitOnly" | "llmThenSplit";
+
+export interface ConfigurableBatchSettings {
+  maxBatchSize: number;
+  splitRatio: number;
+  splitBatchScheduling: SplitBatchScheduling;
+  batchTiming: { mode: BatchTimingMode; minutes: number };
+  splitBatchDelayMinutes: number;
+  failureRecovery: { mode: FailureRecoveryMode };
+}
+
 export type PolicyConfig =
   | { kind: "sequential" }
-  | { kind: "batchSplit"; batchSize: number; maxWait: number; splitRatio: number }
-  | { kind: "bors"; maxBatchSize: number; batchDelay: number; splitBatchScheduling: "beforeFresh" | "fifo" }
-  | { kind: "llmAssisted"; batchSize: number; maxWait: number };
+  | ({ kind: "batchSplit" } & ConfigurableBatchSettings)
+  | ({ kind: "bors" } & ConfigurableBatchSettings)
+  | ({ kind: "llmAssisted" } & ConfigurableBatchSettings);
 
 export type PolicyKind = PolicyConfig["kind"];
 
@@ -160,7 +173,7 @@ export const DEFAULT_SCENARIO: ScenarioConfig = {
 };
 
 
-export type PrStatus = "scheduled" | "waiting" | "ciWaiting" | "ciRunning" | "investigating" | "suspected" | "merged" | "quarantined";
+export type PrStatus = "scheduled" | "waiting" | "ciWaiting" | "ciRunning" | "investigating" | "notSuspected" | "suspected" | "merged" | "quarantined";
 
 export interface PullRequest {
   id: PrId;
@@ -221,6 +234,7 @@ export interface RunMetrics {
   harmfulInteractionRate: number | null;
   masterBecameUnhealthy: number;
   unhealthyMasterDuration: number;
+  resolutionTime: DistributionStats;
   normalMergeTime: DistributionStats;
   quarantineTime: DistributionStats;
   throughput: number | null;
@@ -231,6 +245,12 @@ export interface RunMetrics {
   ciFailures: number;
   ciInvalidations: number;
   ciRetries: number;
+  averageCiRunsPerResolvedPr: number | null;
+  averageBatchSize: number | null;
+  averageSuccessfulBatchSize: number | null;
+  averageFailedBatchSize: number | null;
+  singletonCiRunRate: number | null;
+  mergedPrsPerCiRun: number | null;
   ciUtilization: number | null;
   ciIdleTime: number;
   llmCalls: number;

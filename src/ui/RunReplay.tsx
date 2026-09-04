@@ -4,12 +4,12 @@ import { formatElapsedTime } from "./formatDuration";
 
 const COLORS: Record<PrStatus, string> = {
   scheduled: "#d0d5dd", waiting: "#98a2b3", ciWaiting: "#f79009", ciRunning: "#3182f6",
-  investigating: "#f59e0b", suspected: "#f04438", merged: "#12b76a", quarantined: "#8b5cf6",
+  investigating: "#f59e0b", notSuspected: "#14b8a6", suspected: "#f04438", merged: "#12b76a", quarantined: "#8b5cf6",
 };
 
 const STATUS_LABELS: Record<PrStatus, string> = {
   scheduled: "도착 예정", waiting: "대기", ciWaiting: "CI 대기", ciRunning: "CI 실행",
-  investigating: "조사", suspected: "의심", merged: "머지", quarantined: "격리",
+  investigating: "조사", notSuspected: "비의심", suspected: "의심", merged: "머지", quarantined: "격리",
 };
 
 function ReplayCanvas({ count, states }: { count: number; states: Map<string, PrStatus> }) {
